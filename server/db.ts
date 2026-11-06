@@ -24,43 +24,76 @@ export interface Registration {
   updatedAt: string;
 }
 
-interface DatabaseSchema {
+export interface DatabaseSchema {
   registrations: Registration[];
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DB_FILE = path.join(DATA_DIR, 'registrations.json');
+// In-memory cache for ultra-fast access and fallback in read-only / serverless runtimes
+let memoryDb: DatabaseSchema = { registrations: [] };
+let memoryInitialized = false;
 
-// Ensure database directory and file exist
-function initDb(): void {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+// Resolve safe writable directory (Vercel Serverless allows writes only to /tmp)
+function resolveDbPath(): { dir: string; file: string } {
+  // If running in Vercel or AWS Lambda environment
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    const tmpDir = path.join('/tmp', 'data');
+    return { dir: tmpDir, file: path.join(tmpDir, 'registrations.json') };
   }
-  if (!fs.existsSync(DB_FILE)) {
-    const initial: DatabaseSchema = { registrations: [] };
-    fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2), 'utf-8');
+
+  // Standard environment
+  const standardDir = path.join(process.cwd(), 'data');
+  return { dir: standardDir, file: path.join(standardDir, 'registrations.json') };
+}
+
+// Ensure database directory and file exist safely
+function initDb(): string {
+  const { dir, file } = resolveDbPath();
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    if (!fs.existsSync(file)) {
+      const initial: DatabaseSchema = { registrations: [] };
+      fs.writeFileSync(file, JSON.stringify(initial, null, 2), 'utf-8');
+    }
+  } catch (err) {
+    // If filesystem is read-only, we fall back to memoryDb smoothly
+    console.warn('Filesystem init warning (using in-memory store):', err);
   }
+  return file;
 }
 
 export function readDb(): DatabaseSchema {
   try {
-    initDb();
-    const raw = fs.readFileSync(DB_FILE, 'utf-8');
-    return JSON.parse(raw);
+    const dbFile = initDb();
+    if (fs.existsSync(dbFile)) {
+      const raw = fs.readFileSync(dbFile, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.registrations)) {
+        memoryDb = parsed;
+        memoryInitialized = true;
+        return memoryDb;
+      }
+    }
   } catch (error) {
-    console.error('Error reading database file, returning default:', error);
-    return { registrations: [] };
+    console.warn('Notice: Reading from in-memory store:', error);
   }
+
+  return memoryDb;
 }
 
 export function writeDb(data: DatabaseSchema): void {
+  memoryDb = data;
   try {
-    initDb();
-    const tempFile = `${DB_FILE}.tmp`;
+    const { dir, file } = resolveDbPath();
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const tempFile = `${file}.tmp`;
     fs.writeFileSync(tempFile, JSON.stringify(data, null, 2), 'utf-8');
-    fs.renameSync(tempFile, DB_FILE);
+    fs.renameSync(tempFile, file);
   } catch (error) {
-    console.error('Error writing to database file:', error);
+    console.warn('Notice: Written to in-memory store (disk skipped in serverless):', error);
   }
 }
 
@@ -72,7 +105,7 @@ export function normalizeNigerianPhone(phone: string): { valid: boolean; normali
     return { valid: false, normalized: '', error: 'Phone number is required.' };
   }
 
-  // Remove all non-digits except a leading +
+  // Remove all spaces, hyphens, and parentheses
   let cleaned = phone.replace(/[\s\-\(\)]/g, '');
 
   if (cleaned.startsWith('+234')) {

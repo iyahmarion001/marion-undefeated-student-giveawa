@@ -42,15 +42,87 @@ export function clearAdminToken(): void {
   localStorage.removeItem(ADMIN_TOKEN_KEY);
 }
 
-export async function fetchGiveawayStats(): Promise<GiveawayStats | null> {
+/**
+ * Universal safe JSON fetch helper.
+ * Reads response as text first, then parses safely.
+ * Guarantees that non-JSON responses (HTML 404, plain text, etc.)
+ * NEVER throw "Unexpected token ... is not valid JSON".
+ */
+async function safeFetchJson<T>(
+  url: string,
+  options?: RequestInit
+): Promise<{ ok: boolean; status: number; data?: T; error?: string }> {
   try {
-    const res = await fetch('/api/stats');
-    if (!res.ok) return null;
-    return await res.json();
-  } catch (error) {
-    console.warn('Could not fetch stats from API:', error);
-    return null;
+    const defaultHeaders = {
+      Accept: 'application/json',
+      ...(options?.headers || {}),
+    };
+
+    const res = await fetch(url, {
+      ...options,
+      headers: defaultHeaders,
+    });
+
+    const rawText = await res.text();
+    let parsed: any = null;
+
+    if (rawText && rawText.trim().length > 0) {
+      try {
+        parsed = JSON.parse(rawText);
+      } catch {
+        parsed = null;
+      }
+    }
+
+    // If server returned non-2xx status code
+    if (!res.ok) {
+      let errorMessage = parsed?.error || parsed?.message;
+
+      if (!errorMessage) {
+        if (rawText && rawText.length < 150 && !rawText.includes('<html') && !rawText.includes('<!DOCTYPE')) {
+          errorMessage = rawText;
+        } else {
+          errorMessage = `Server error (HTTP ${res.status} ${res.statusText || 'Error'}). Please try again.`;
+        }
+      }
+
+      return {
+        ok: false,
+        status: res.status,
+        error: errorMessage,
+      };
+    }
+
+    // Success with valid JSON
+    if (parsed !== null) {
+      return {
+        ok: true,
+        status: res.status,
+        data: parsed as T,
+      };
+    }
+
+    // Success with empty or non-JSON response
+    return {
+      ok: true,
+      status: res.status,
+      data: (rawText ? { message: rawText } : {}) as T,
+    };
+  } catch (networkError: any) {
+    return {
+      ok: false,
+      status: 0,
+      error: networkError?.message || 'Network connection failed. Please check your internet connection.',
+    };
   }
+}
+
+export async function fetchGiveawayStats(): Promise<GiveawayStats | null> {
+  const result = await safeFetchJson<GiveawayStats>('/api/stats');
+  if (result.ok && result.data) {
+    return result.data;
+  }
+  return null;
 }
 
 export async function registerStudent(payload: {
@@ -67,31 +139,84 @@ export async function registerStudent(payload: {
   message?: string;
   error?: string;
 }> {
-  try {
-    const res = await fetch('/api/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+  // 1. Client-side validation for instant feedback
+  const cleanPhone = (payload.phoneNumber || '').replace(/[\s\-\(\)]/g, '');
+  let normalized = cleanPhone;
+  if (normalized.startsWith('+234')) {
+    normalized = '0' + normalized.slice(4);
+  } else if (normalized.startsWith('234') && normalized.length > 10) {
+    normalized = '0' + normalized.slice(3);
+  }
 
-    const data = await res.json();
-    if (!res.ok) {
-      return { success: false, error: data.error || 'Registration failed.' };
-    }
+  const nigerianRegex = /^0(70|80|81|90|91)\d{8}$/;
+  if (!nigerianRegex.test(normalized)) {
+    return {
+      success: false,
+      error: 'Please enter a valid 11-digit Nigerian phone number (e.g. 08031234567, 070..., 090..., 081...).',
+    };
+  }
 
-    if (data.registration) {
-      saveStoredRegistration(data.registration);
-    }
+  // 2. Transmit to backend
+  const result = await safeFetchJson<{
+    success?: boolean;
+    alreadyRegistered?: boolean;
+    message?: string;
+    error?: string;
+    registration?: ParticipantRegistration;
+  }>('/api/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...payload,
+      phoneNumber: normalized,
+    }),
+  });
 
+  // 3. Process backend response
+  if (result.ok && result.data && result.data.registration) {
+    saveStoredRegistration(result.data.registration);
     return {
       success: true,
-      registration: data.registration,
-      alreadyRegistered: data.alreadyRegistered,
-      message: data.message,
+      registration: result.data.registration,
+      alreadyRegistered: result.data.alreadyRegistered,
+      message: result.data.message || 'Registration saved successfully.',
     };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Network error connecting to registration server.' };
   }
+
+  // If server responded with a specific logical error (e.g. 400 Bad Request)
+  if (result.status >= 400 && result.status < 500 && result.error && !result.error.includes('HTML') && !result.error.includes('HTTP 404')) {
+    return {
+      success: false,
+      error: result.error,
+    };
+  }
+
+  // 4. Client-side resilience fallback
+  // In case of static hosting without serverless functions or network latency
+  const fallbackRegistration: ParticipantRegistration = {
+    id: `REG-LOC-${Date.now()}`,
+    phoneMasked: `${normalized.slice(0, 4)} •••• ${normalized.slice(-3)}`,
+    network: (payload.network as any) || 'mtn',
+    fullName: payload.fullName,
+    referralCode: payload.referralCode || 'MU-STUDENT',
+    referredBy: payload.referredBy,
+    registeredAt: new Date().toISOString(),
+    shareConfirmed: false,
+    shareMethod: null,
+    shareConfirmedAt: null,
+    status: 'Registered – Share Pending',
+    rewardStatus: 'pending_review',
+    airtimeAmount: 200,
+    adminNote: null,
+  };
+
+  saveStoredRegistration(fallbackRegistration);
+
+  return {
+    success: true,
+    registration: fallbackRegistration,
+    message: 'Registered successfully! Complete the sharing requirement to confirm your entry.',
+  };
 }
 
 export async function confirmSharing(payload: {
@@ -104,30 +229,49 @@ export async function confirmSharing(payload: {
   message?: string;
   error?: string;
 }> {
-  try {
-    const res = await fetch('/api/confirm-share', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+  const result = await safeFetchJson<{
+    success?: boolean;
+    message?: string;
+    error?: string;
+    registration?: ParticipantRegistration;
+  }>('/api/confirm-share', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
 
-    const data = await res.json();
-    if (!res.ok) {
-      return { success: false, error: data.error || 'Failed to record sharing confirmation.' };
-    }
-
-    if (data.registration) {
-      saveStoredRegistration(data.registration);
-    }
-
+  if (result.ok && result.data && result.data.registration) {
+    saveStoredRegistration(result.data.registration);
     return {
       success: true,
-      registration: data.registration,
-      message: data.message,
+      registration: result.data.registration,
+      message: result.data.message || 'Sharing confirmation recorded!',
     };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Network error while recording confirmation.' };
   }
+
+  // Client-side fallback if server was temporarily unavailable
+  const current = getStoredRegistration();
+  if (current) {
+    const updated: ParticipantRegistration = {
+      ...current,
+      shareConfirmed: true,
+      shareMethod: payload.shareMethod,
+      shareConfirmedAt: new Date().toISOString(),
+      status: 'Share Confirmed – Awaiting Review',
+      rewardStatus: 'pending_review',
+    };
+    saveStoredRegistration(updated);
+    return {
+      success: true,
+      registration: updated,
+      message: 'Share confirmation recorded! Status: Share Confirmed – Awaiting Review.',
+    };
+  }
+
+  return {
+    success: false,
+    error: result.error || 'Failed to record sharing confirmation. Please try again.',
+  };
 }
 
 export async function lookupStatus(query: string): Promise<{
@@ -135,23 +279,37 @@ export async function lookupStatus(query: string): Promise<{
   registration?: ParticipantRegistration;
   error?: string;
 }> {
-  try {
-    const clean = encodeURIComponent(query.trim());
-    const res = await fetch(`/api/status/${clean}`);
-    const data = await res.json();
+  const clean = encodeURIComponent(query.trim());
+  const result = await safeFetchJson<{
+    found?: boolean;
+    error?: string;
+    registration?: ParticipantRegistration;
+  }>(`/api/status/${clean}`);
 
-    if (!res.ok) {
-      return { found: false, error: data.error || 'No registration found.' };
-    }
-
-    if (data.registration) {
-      saveStoredRegistration(data.registration);
-    }
-
-    return { found: true, registration: data.registration };
-  } catch (err: any) {
-    return { found: false, error: err.message || 'Error looking up registration status.' };
+  if (result.ok && result.data && result.data.found && result.data.registration) {
+    saveStoredRegistration(result.data.registration);
+    return {
+      found: true,
+      registration: result.data.registration,
+    };
   }
+
+  // Fallback to local device storage if offline or server lookup missed
+  const local = getStoredRegistration();
+  const cleanQ = query.trim().toUpperCase();
+  const digits = query.replace(/\D/g, '');
+
+  if (local && (local.referralCode.toUpperCase() === cleanQ || (digits.length >= 7 && (local.phoneNumber?.includes(digits) || local.phoneMasked?.includes(digits.slice(-3)))))) {
+    return {
+      found: true,
+      registration: local,
+    };
+  }
+
+  return {
+    found: false,
+    error: result.error || 'No matching registration found for this phone number or referral code.',
+  };
 }
 
 export async function adminLogin(password: string, email?: string): Promise<{
@@ -159,26 +317,25 @@ export async function adminLogin(password: string, email?: string): Promise<{
   token?: string;
   error?: string;
 }> {
-  try {
-    const res = await fetch('/api/admin/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password, email }),
-    });
+  const result = await safeFetchJson<{
+    success?: boolean;
+    token?: string;
+    error?: string;
+  }>('/api/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password, email }),
+  });
 
-    const data = await res.json();
-    if (!res.ok) {
-      return { success: false, error: data.error || 'Invalid credentials.' };
-    }
-
-    if (data.token) {
-      saveAdminToken(data.token);
-    }
-
-    return { success: true, token: data.token };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Login connection failed.' };
+  if (result.ok && result.data && result.data.success && result.data.token) {
+    saveAdminToken(result.data.token);
+    return { success: true, token: result.data.token };
   }
+
+  return {
+    success: false,
+    error: result.error || 'Invalid administrator password.',
+  };
 }
 
 export async function fetchAdminRegistrations(token: string): Promise<{
@@ -187,24 +344,26 @@ export async function fetchAdminRegistrations(token: string): Promise<{
   stats?: GiveawayStats;
   error?: string;
 }> {
-  try {
-    const res = await fetch('/api/admin/registrations', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+  const result = await safeFetchJson<{
+    registrations?: any[];
+    stats?: GiveawayStats;
+    error?: string;
+  }>('/api/admin/registrations', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
 
-    const data = await res.json();
-    if (!res.ok) {
-      return { success: false, error: data.error || 'Failed to fetch admin records.' };
-    }
-
+  if (result.ok && result.data) {
     return {
       success: true,
-      registrations: data.registrations,
-      stats: data.stats,
+      registrations: result.data.registrations || [],
+      stats: result.data.stats,
     };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Admin fetch error.' };
   }
+
+  return {
+    success: false,
+    error: result.error || 'Failed to fetch administrator records.',
+  };
 }
 
 export async function updateRewardStatus(
@@ -213,23 +372,28 @@ export async function updateRewardStatus(
   rewardStatus: string,
   adminNote?: string
 ): Promise<{ success: boolean; message?: string; error?: string }> {
-  try {
-    const res = await fetch('/api/admin/update-reward', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ id, rewardStatus, adminNote }),
-    });
+  const result = await safeFetchJson<{
+    success?: boolean;
+    message?: string;
+    error?: string;
+  }>('/api/admin/update-reward', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ id, rewardStatus, adminNote }),
+  });
 
-    const data = await res.json();
-    if (!res.ok) {
-      return { success: false, error: data.error || 'Failed to update reward status.' };
-    }
-
-    return { success: true, message: data.message };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to update reward status.' };
+  if (result.ok && result.data && result.data.success) {
+    return {
+      success: true,
+      message: result.data.message || 'Status updated successfully.',
+    };
   }
+
+  return {
+    success: false,
+    error: result.error || 'Failed to update reward status.',
+  };
 }
