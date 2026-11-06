@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --brand-navy: #030c1d;
+    --brand-dark-blue: #081735;
+    --brand-card-blue: #0d2350;
+    --brand-bright-blue: #0084ff;
+    --brand-cyan: #38bdf8;
+    --brand-yellow: #ffd000;
+    --brand-yellow-glow: #f59e0b;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: #030c1d;
+    color: #f1f5f9;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+}
+
+/* Custom subtle glow & utilities */
+.glow-blue {
+  box-shadow: 0 0 35px -5px rgba(0, 132, 255, 0.35);
+}
+
+.glow-yellow {
+  box-shadow: 0 0 25px -4px rgba(255, 208, 0, 0.4);
+}
+
+.bg-radial-hero {
+  background: radial-gradient(circle at 50% 20%, rgba(0, 132, 255, 0.18) 0%, rgba(3, 12, 29, 0) 70%),
+              radial-gradient(circle at 80% 80%, rgba(255, 208, 0, 0.08) 0%, rgba(3, 12, 29, 0) 60%),
+              #030c1d;
+}
+
+/* Custom tap active state for touch screens */
+.tap-bounce {
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+.tap-bounce:active {
+  transform: scale(0.97);
+}
