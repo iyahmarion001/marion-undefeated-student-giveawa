@@ -55,6 +55,7 @@ export const GIVEAWAY_INFO = {
   sessionYear: '2026',
   posterPath: '/assets/aistudio/IMG-20261103-WA0034_a3d08139.jpg',
   whatsappCommunityUrl: 'https://chat.whatsapp.com/marion-undefeated-students',
+  adminWhatsAppNumber: '2348156310125',
   deployedAppUrl: 'https://ais-dev-nnhflti22ouag6junyuqix-911064966292.europe-west2.run.app'
 };
 
@@ -75,21 +76,28 @@ export interface ParticipantRegistration {
   shareConfirmed: boolean;
   shareMethod?: ShareMethod | null;
   shareConfirmedAt?: string | null;
+  shareClicks?: number;
+  notifyAdminClicks?: number;
   status: ParticipationStatus;
   rewardStatus: RewardStatus;
   airtimeAmount: number;
   adminNote?: string | null;
+  updatedAt?: string;
 }
 
 export interface GiveawayStats {
   totalRegistered: number;
   sharesConfirmed: number;
   pendingReview: number;
+  approvedEntries: number;
   airtimeCredited: number;
+  rejectedEntries: number;
   totalSlots: number;
   remainingSlots: number;
   totalBudget: number;
+  totalAirtimePaid: number;
   rewardAmount: number;
+  totalReferralVisits?: number;
   networkCounts: {
     mtn: number;
     airtel: number;

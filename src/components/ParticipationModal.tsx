@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, Sparkles, Share2, Copy, Check, ShieldCheck, Bell, ExternalLink, 
   Users, MessageCircle, AlertCircle, Phone, CheckCircle, Clock, 
-  RefreshCw, Search, ChevronRight, ArrowLeft 
+  RefreshCw, Search, ChevronRight, ArrowLeft, Send
 } from 'lucide-react';
 import { GIVEAWAY_INFO, SUPPORTED_NETWORKS, ParticipantRegistration, ShareMethod } from '../types/giveaway';
 import { 
@@ -11,13 +11,19 @@ import {
   buildWhatsAppShareText, 
   getWhatsAppShareUrl,
   openWhatsAppShare,
-  getReferralCodeFromUrl
+  getReferralCodeFromUrl,
+  buildAdminWhatsAppMessage,
+  openAdminWhatsApp,
+  ADMIN_NOTIFICATION_NUMBER
 } from '../utils/referral';
 import { 
   registerStudent, 
   confirmSharing, 
   lookupStatus, 
-  getStoredRegistration 
+  getStoredRegistration,
+  trackReferralVisit,
+  trackShareClick,
+  trackNotifyAdminClick
 } from '../utils/api';
 
 interface ParticipationModalProps {
@@ -46,6 +52,7 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
   const [isConfirmingShare, setIsConfirmingShare] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedMessage, setCopiedMessage] = useState(false);
+  const [copiedAdminProof, setCopiedAdminProof] = useState(false);
   const [whatsAppAttempted, setWhatsAppAttempted] = useState(false);
 
   // Status lookup state
@@ -66,7 +73,12 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
       const code = getOrCreateReferralCode();
       setReferralCode(code);
       setReferralLink(getReferralLink(code));
-      setIncomingRef(getReferralCodeFromUrl());
+      
+      const incoming = getReferralCodeFromUrl();
+      setIncomingRef(incoming);
+      if (incoming) {
+        trackReferralVisit(incoming);
+      }
 
       // Check if participant already has a stored registration
       const stored = getStoredRegistration();
@@ -88,6 +100,10 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
   const handleShareOnWhatsApp = (e: React.MouseEvent) => {
     e.preventDefault();
     setWhatsAppAttempted(true);
+
+    // Track click
+    trackShareClick(currentRegistration?.referralCode || referralCode);
+
     const opened = openWhatsAppShare(shareText);
     if (opened) {
       onShowToast('Opening WhatsApp... Choose 3 groups or 10 friends to share!');
@@ -167,7 +183,55 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
     }
   };
 
-  // Step 3: Lookup existing status
+  // Step 3: Notify Admin via WhatsApp
+  const handleNotifyAdminWhatsApp = () => {
+    if (!currentRegistration) return;
+
+    // Track notify click
+    trackNotifyAdminClick(currentRegistration.id);
+
+    const msg = buildAdminWhatsAppMessage({
+      id: currentRegistration.id,
+      phoneNumber: currentRegistration.phoneNumber,
+      phoneMasked: currentRegistration.phoneMasked,
+      network: currentRegistration.network,
+      referralCode: currentRegistration.referralCode,
+      shareMethod: currentRegistration.shareMethod,
+      shareConfirmedAt: currentRegistration.shareConfirmedAt,
+      status: currentRegistration.status,
+    });
+
+    const opened = openAdminWhatsApp(msg, ADMIN_NOTIFICATION_NUMBER);
+    if (opened) {
+      onShowToast(`Opening WhatsApp to Admin (${ADMIN_NOTIFICATION_NUMBER})... Remember to press SEND in WhatsApp!`);
+    } else {
+      onShowToast('Could not open WhatsApp window. Please use Copy Proof Message below.');
+    }
+  };
+
+  const handleCopyAdminProof = () => {
+    if (!currentRegistration) return;
+    const msg = buildAdminWhatsAppMessage({
+      id: currentRegistration.id,
+      phoneNumber: currentRegistration.phoneNumber,
+      phoneMasked: currentRegistration.phoneMasked,
+      network: currentRegistration.network,
+      referralCode: currentRegistration.referralCode,
+      shareMethod: currentRegistration.shareMethod,
+      shareConfirmedAt: currentRegistration.shareConfirmedAt,
+      status: currentRegistration.status,
+    });
+
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(msg).then(() => {
+        setCopiedAdminProof(true);
+        onShowToast('Proof message copied! Send it to 2348156310125 in WhatsApp.');
+        setTimeout(() => setCopiedAdminProof(false), 2500);
+      });
+    }
+  };
+
+  // Step 4: Lookup existing status
   const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!lookupQuery.trim()) return;
@@ -281,7 +345,7 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
                   <span>Check Your Participation Status</span>
                 </h4>
                 <p className="text-xs text-blue-200 leading-relaxed">
-                  Enter your registered Nigerian phone number or referral code to check if your ₦200 airtime has been credited or is under review.
+                  Enter your registered Nigerian phone number or referral code to check if your ₦200 airtime has been approved, credited, or is under review.
                 </p>
 
                 <form onSubmit={handleLookup} className="space-y-3">
@@ -358,6 +422,10 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
                 <div className={`p-4 rounded-2xl border shadow-md space-y-3 ${
                   currentRegistration.rewardStatus === 'credited'
                     ? 'bg-gradient-to-b from-emerald-950 to-emerald-900/80 border-emerald-400'
+                    : currentRegistration.rewardStatus === 'approved'
+                    ? 'bg-gradient-to-b from-cyan-950 to-cyan-900/80 border-cyan-400'
+                    : currentRegistration.rewardStatus === 'declined'
+                    ? 'bg-gradient-to-b from-red-950 to-red-900/80 border-red-400'
                     : currentRegistration.shareConfirmed
                     ? 'bg-gradient-to-b from-[#0a234f] to-[#071838] border-yellow-400/80'
                     : 'bg-gradient-to-b from-[#091e42] to-[#051430] border-blue-600/70'
@@ -371,7 +439,17 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
                         {currentRegistration.rewardStatus === 'credited' ? (
                           <>
                             <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
-                            <span className="text-emerald-300">Airtime Credited (₦200)</span>
+                            <span className="text-emerald-300">Airtime Paid (₦200 Disbursed)</span>
+                          </>
+                        ) : currentRegistration.rewardStatus === 'approved' ? (
+                          <>
+                            <CheckCircle className="w-5 h-5 text-cyan-400 shrink-0" />
+                            <span className="text-cyan-300">Approved for Airtime</span>
+                          </>
+                        ) : currentRegistration.rewardStatus === 'declined' ? (
+                          <>
+                            <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+                            <span className="text-red-300">Entry Rejected</span>
                           </>
                         ) : currentRegistration.shareConfirmed ? (
                           <>
@@ -400,6 +478,13 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
                   {/* Summary grid */}
                   <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-blue-800/40">
                     <div>
+                      <span className="text-[10px] text-slate-400 block">Registration ID:</span>
+                      <span className="font-mono text-white text-[11px] truncate block">
+                        {currentRegistration.id}
+                      </span>
+                    </div>
+
+                    <div>
                       <span className="text-[10px] text-slate-400 block">Phone Line:</span>
                       <span className="font-mono font-bold text-white">
                         {currentRegistration.phoneMasked || currentRegistration.phoneNumber}
@@ -415,7 +500,7 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
 
                     <div>
                       <span className="text-[10px] text-slate-400 block">Reward Amount:</span>
-                      <span className="font-black text-white">₦200 Airtime</span>
+                      <span className="font-black text-white">₦{currentRegistration.airtimeAmount || 200} Airtime</span>
                     </div>
 
                     <div>
@@ -425,7 +510,14 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
                           ? '3 WhatsApp Groups'
                           : currentRegistration.shareMethod === 'individuals_10'
                           ? '10 Individuals'
-                          : 'Not Confirmed Yet'}
+                          : 'Pending Sharing'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-400 block">Review Level:</span>
+                      <span className="text-amber-300 font-medium">
+                        {currentRegistration.shareConfirmed ? 'Self-Reported (Admin Review)' : 'Unconfirmed'}
                       </span>
                     </div>
                   </div>
@@ -442,6 +534,53 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
                   {currentRegistration.adminNote && (
                     <div className="p-2 rounded-lg bg-[#030a1c] border border-blue-700/50 text-[11px] text-blue-200">
                       <strong>Administrator Note:</strong> {currentRegistration.adminNote}
+                    </div>
+                  )}
+
+                  {/* SECTION C: WHATSAPP NOTIFICATION TO ADMINISTRATOR (2348156310125) */}
+                  {currentRegistration.shareConfirmed && (
+                    <div className="mt-3 p-3.5 rounded-xl bg-[#051126] border border-emerald-500/60 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                          <MessageCircle className="w-4 h-4 text-emerald-400" />
+                          <span>Notify Administrator via WhatsApp</span>
+                        </span>
+                        <span className="text-[10px] text-emerald-300 font-mono bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-700/50">
+                          {ADMIN_NOTIFICATION_NUMBER}
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        Speed up your review by sending your pre-filled registration and proof directly to the administrator on WhatsApp.
+                      </p>
+
+                      <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleNotifyAdminWhatsApp}
+                          className="tap-bounce flex-1 py-2.5 px-3 rounded-xl bg-[#25D366] hover:bg-[#20ba59] active:bg-[#1da850] text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950/50 cursor-pointer border border-emerald-300/40"
+                        >
+                          <Send className="w-3.5 h-3.5 fill-slate-950 text-emerald-700" />
+                          <span>Notify Admin ({ADMIN_NOTIFICATION_NUMBER})</span>
+                          <ExternalLink className="w-3 h-3 opacity-70" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleCopyAdminProof}
+                          className="tap-bounce py-2 px-3 rounded-xl bg-blue-950 hover:bg-blue-900 border border-blue-700/60 text-blue-200 text-xs font-semibold flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <Copy className="w-3.5 h-3.5 text-yellow-400" />
+                          <span>{copiedAdminProof ? 'Proof Copied!' : 'Copy Proof Text'}</span>
+                        </button>
+                      </div>
+
+                      <div className="text-[10px] text-amber-200/90 bg-amber-950/40 border border-amber-600/30 p-2 rounded-lg flex items-start gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                        <span>
+                          <strong>Delivery Note:</strong> WhatsApp will open addressed to <strong>{ADMIN_NOTIFICATION_NUMBER}</strong> with your prefilled details. You must press <strong>Send</strong> inside WhatsApp to deliver your notification.
+                        </span>
+                      </div>
                     </div>
                   )}
 
@@ -694,7 +833,7 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
                     ) : (
                       <>
                         <CheckCircle className="w-5 h-5 fill-slate-950 text-emerald-400" />
-                        <span>I've Shared (Confirm My Entry)</span>
+                        <span>I've Shared (Submit for Review)</span>
                       </>
                     )}
                   </button>
@@ -703,7 +842,7 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
                   <div className="p-2.5 rounded-xl bg-blue-950/70 border border-blue-700/40 text-[11px] text-slate-300 leading-relaxed flex items-start gap-2">
                     <ShieldCheck className="w-4 h-4 text-yellow-400 shrink-0 mt-0.5" />
                     <span>
-                      <strong className="text-white">Honest Participant Confirmation:</strong> Clicking <em>"I've Shared"</em> records your confirmation date and moves your status to <strong>"Share Confirmed – Awaiting Review"</strong>. We do not make fake claims of automated WhatsApp inspection; entries are reviewed manually by the administrator.
+                      <strong className="text-white">Honest Participant Confirmation:</strong> Clicking <em>"I've Shared"</em> records your confirmation and marks your entry as <strong>"Awaiting Review"</strong>. Entries are never automatically approved without administrator inspection.
                     </span>
                   </div>
                 </div>

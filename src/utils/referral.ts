@@ -1,10 +1,13 @@
 /**
  * Utility functions for participant unique referral codes,
- * referral links, and WhatsApp sharing mechanics.
+ * referral links, WhatsApp sharing mechanics, and administrator notification.
  */
+
+import { GIVEAWAY_INFO } from '../types/giveaway';
 
 // The actual publicly accessible deployed application URL on Cloud Run
 export const DEPLOYED_APP_URL = 'https://ais-dev-nnhflti22ouag6junyuqix-911064966292.europe-west2.run.app';
+export const ADMIN_NOTIFICATION_NUMBER = GIVEAWAY_INFO.adminWhatsAppNumber || '2348156310125';
 
 const OWN_REFERRAL_STORAGE_KEY = 'marion_undefeated_student_ref_code';
 const REFERRED_BY_STORAGE_KEY = 'marion_undefeated_student_referred_by';
@@ -145,6 +148,71 @@ export function openWhatsAppShare(messageText: string): boolean {
     return !!newWindow;
   } catch (error) {
     console.error('Failed to open WhatsApp window:', error);
+    return false;
+  }
+}
+
+/**
+ * Builds the prefilled WhatsApp notification message addressed directly
+ * to the administrator at 2348156310125.
+ */
+export function buildAdminWhatsAppMessage(registration: {
+  id: string;
+  phoneNumber?: string;
+  phoneMasked?: string;
+  network: string;
+  referralCode: string;
+  shareMethod?: string | null;
+  shareConfirmedAt?: string | null;
+  status: string;
+}): string {
+  const methodText =
+    registration.shareMethod === 'groups_3'
+      ? '3 WhatsApp Groups'
+      : registration.shareMethod === 'individuals_10'
+      ? '10 Individual People'
+      : 'Self-Confirmed Sharing';
+
+  const dateText = registration.shareConfirmedAt
+    ? new Date(registration.shareConfirmedAt).toLocaleString()
+    : new Date().toLocaleString();
+
+  return (
+    `👋 *HELLO MARION UNDEFEATED ADMIN!*\n\n` +
+    `I have registered for the *Student Airtime Giveaway 2026* and completed the sharing requirement. Here are my submission details:\n\n` +
+    `📌 *Registration ID:* ${registration.id}\n` +
+    `📱 *Phone Number:* ${registration.phoneNumber || registration.phoneMasked || 'N/A'}\n` +
+    `📶 *Network Provider:* ${registration.network.toUpperCase()}\n` +
+    `💰 *Requested Airtime:* ₦200\n` +
+    `🔑 *Referral Code:* ${registration.referralCode}\n` +
+    `📢 *Sharing Proof:* ${methodText}\n` +
+    `⏰ *Submission Date:* ${dateText}\n` +
+    `📊 *Current Status:* ${registration.status}\n\n` +
+    `Please review my submission and credit my ₦200 airtime on ${registration.network.toUpperCase()}.\n\n` +
+    `Thank you!\n` +
+    `#Let's make every penny count.`
+  );
+}
+
+/**
+ * Returns the WhatsApp URL addressed directly to the administrator (2348156310125).
+ */
+export function getAdminWhatsAppUrl(messageText: string, adminNumber = ADMIN_NOTIFICATION_NUMBER): string {
+  const cleanNumber = adminNumber.replace(/\D/g, '');
+  return `https://wa.me/${cleanNumber}?text=${encodeURIComponent(messageText)}`;
+}
+
+/**
+ * Opens WhatsApp chat addressed directly to the administrator with the prefilled message.
+ */
+export function openAdminWhatsApp(messageText: string, adminNumber = ADMIN_NOTIFICATION_NUMBER): boolean {
+  if (typeof window === 'undefined') return false;
+  const url = getAdminWhatsAppUrl(messageText, adminNumber);
+  try {
+    const newWindow = window.open(url, '_blank', 'noopener,noreferrer');
+    return !!newWindow;
+  } catch (error) {
+    console.error('Failed to open WhatsApp admin notification window:', error);
     return false;
   }
 }

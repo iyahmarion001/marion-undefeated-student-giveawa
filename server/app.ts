@@ -1,11 +1,14 @@
 import express from 'express';
 import {
-  readDb,
-  writeDb,
+  getAllRegistrationsAsync,
+  saveRegistrationAsync,
+  findRegistrationAsync,
+  getGiveawayStatsAsync,
+  recordReferralVisitAsync,
+  recordShareClickAsync,
+  recordNotifyAdminClickAsync,
   normalizeNigerianPhone,
   maskPhone,
-  findRegistration,
-  getGiveawayStats,
   type Registration
 } from './db';
 
@@ -37,9 +40,9 @@ app.get('/health', (_req, res) => {
 });
 
 // 2. Giveaway Statistics
-app.get('/api/stats', (_req, res) => {
+app.get('/api/stats', async (_req, res) => {
   try {
-    const stats = getGiveawayStats();
+    const stats = await getGiveawayStatsAsync();
     res.status(200).json(stats);
   } catch (error: any) {
     console.error('Error fetching stats:', error);
@@ -48,7 +51,7 @@ app.get('/api/stats', (_req, res) => {
 });
 
 // 3. Register for Giveaway
-app.post('/api/register', (req, res) => {
+app.post('/api/register', async (req, res) => {
   try {
     const { phoneNumber, network, referralCode, referredBy, fullName, department } = req.body || {};
 
@@ -65,8 +68,7 @@ app.post('/api/register', (req, res) => {
     const validNetworks = ['mtn', 'airtel', 'glo', '9mobile'];
     const chosenNetwork = validNetworks.includes(network) ? network : 'mtn';
 
-    const db = readDb();
-    const existing = db.registrations.find((r) => r.phoneNumber === normalizedPhone);
+    const existing = await findRegistrationAsync(normalizedPhone);
 
     if (existing) {
       return res.status(200).json({
@@ -74,6 +76,7 @@ app.post('/api/register', (req, res) => {
         message: 'You have already registered for the giveaway. Here is your current participation status.',
         registration: {
           id: existing.id,
+          phoneNumber: existing.phoneNumber,
           phoneMasked: maskPhone(existing.phoneNumber),
           network: existing.network,
           fullName: existing.fullName,
@@ -83,6 +86,8 @@ app.post('/api/register', (req, res) => {
           shareConfirmed: existing.shareConfirmed,
           shareMethod: existing.shareMethod,
           shareConfirmedAt: existing.shareConfirmedAt,
+          shareClicks: existing.shareClicks || 0,
+          notifyAdminClicks: existing.notifyAdminClicks || 0,
           status: existing.status,
           rewardStatus: existing.rewardStatus,
           airtimeAmount: existing.airtimeAmount,
@@ -107,6 +112,8 @@ app.post('/api/register', (req, res) => {
       shareConfirmed: false,
       shareMethod: null,
       shareConfirmedAt: null,
+      shareClicks: 0,
+      notifyAdminClicks: 0,
       status: 'Registered – Share Pending',
       rewardStatus: 'pending_review',
       airtimeAmount: 200,
@@ -114,27 +121,29 @@ app.post('/api/register', (req, res) => {
       updatedAt: new Date().toISOString(),
     };
 
-    db.registrations.push(newRecord);
-    writeDb(db);
+    const saved = await saveRegistrationAsync(newRecord);
 
     return res.status(201).json({
       success: true,
       message: 'Registration successful! Complete the sharing requirement to confirm your entry.',
       registration: {
-        id: newRecord.id,
-        phoneMasked: maskPhone(newRecord.phoneNumber),
-        network: newRecord.network,
-        fullName: newRecord.fullName,
-        referralCode: newRecord.referralCode,
-        referredBy: newRecord.referredBy,
-        registeredAt: newRecord.registeredAt,
-        shareConfirmed: newRecord.shareConfirmed,
-        shareMethod: newRecord.shareMethod,
-        shareConfirmedAt: newRecord.shareConfirmedAt,
-        status: newRecord.status,
-        rewardStatus: newRecord.rewardStatus,
-        airtimeAmount: newRecord.airtimeAmount,
-        adminNote: newRecord.adminNote,
+        id: saved.id,
+        phoneNumber: saved.phoneNumber,
+        phoneMasked: maskPhone(saved.phoneNumber),
+        network: saved.network,
+        fullName: saved.fullName,
+        referralCode: saved.referralCode,
+        referredBy: saved.referredBy,
+        registeredAt: saved.registeredAt,
+        shareConfirmed: saved.shareConfirmed,
+        shareMethod: saved.shareMethod,
+        shareConfirmedAt: saved.shareConfirmedAt,
+        shareClicks: saved.shareClicks || 0,
+        notifyAdminClicks: saved.notifyAdminClicks || 0,
+        status: saved.status,
+        rewardStatus: saved.rewardStatus,
+        airtimeAmount: saved.airtimeAmount,
+        adminNote: saved.adminNote,
       },
     });
   } catch (error: any) {
@@ -144,7 +153,7 @@ app.post('/api/register', (req, res) => {
 });
 
 // 4. Confirm Sharing (Record "I've Shared")
-app.post('/api/confirm-share', (req, res) => {
+app.post('/api/confirm-share', async (req, res) => {
   try {
     const { phoneNumber, referralCode, shareMethod } = req.body || {};
 
@@ -154,20 +163,12 @@ app.post('/api/confirm-share', (req, res) => {
       });
     }
 
-    const db = readDb();
-    let record: Registration | undefined;
-
-    if (phoneNumber) {
-      const normalized = normalizeNigerianPhone(phoneNumber);
-      if (normalized.valid) {
-        record = db.registrations.find((r) => r.phoneNumber === normalized.normalized);
-      }
+    const query = phoneNumber || referralCode;
+    if (!query) {
+      return res.status(400).json({ error: 'Phone number or referral code is required.' });
     }
 
-    if (!record && referralCode) {
-      const cleanCode = String(referralCode).trim().toUpperCase();
-      record = db.registrations.find((r) => r.referralCode === cleanCode);
-    }
+    const record = await findRegistrationAsync(query);
 
     if (!record) {
       return res.status(404).json({
@@ -175,32 +176,35 @@ app.post('/api/confirm-share', (req, res) => {
       });
     }
 
-    // Record participant's self-confirmation honestly
+    // Record participant's self-confirmation
     record.shareConfirmed = true;
     record.shareMethod = shareMethod;
     record.shareConfirmedAt = new Date().toISOString();
     record.status = 'Share Confirmed – Awaiting Review';
     record.updatedAt = new Date().toISOString();
 
-    writeDb(db);
+    const saved = await saveRegistrationAsync(record);
 
     return res.status(200).json({
       success: true,
-      message: 'Sharing confirmation recorded! Your status is now Share Confirmed – Awaiting Review.',
+      message: 'Sharing confirmation recorded! Status: Share Confirmed – Awaiting Review.',
       registration: {
-        id: record.id,
-        phoneMasked: maskPhone(record.phoneNumber),
-        network: record.network,
-        fullName: record.fullName,
-        referralCode: record.referralCode,
-        registeredAt: record.registeredAt,
-        shareConfirmed: record.shareConfirmed,
-        shareMethod: record.shareMethod,
-        shareConfirmedAt: record.shareConfirmedAt,
-        status: record.status,
-        rewardStatus: record.rewardStatus,
-        airtimeAmount: record.airtimeAmount,
-        adminNote: record.adminNote,
+        id: saved.id,
+        phoneNumber: saved.phoneNumber,
+        phoneMasked: maskPhone(saved.phoneNumber),
+        network: saved.network,
+        fullName: saved.fullName,
+        referralCode: saved.referralCode,
+        registeredAt: saved.registeredAt,
+        shareConfirmed: saved.shareConfirmed,
+        shareMethod: saved.shareMethod,
+        shareConfirmedAt: saved.shareConfirmedAt,
+        shareClicks: saved.shareClicks || 0,
+        notifyAdminClicks: saved.notifyAdminClicks || 0,
+        status: saved.status,
+        rewardStatus: saved.rewardStatus,
+        airtimeAmount: saved.airtimeAmount,
+        adminNote: saved.adminNote,
       },
     });
   } catch (error: any) {
@@ -210,14 +214,14 @@ app.post('/api/confirm-share', (req, res) => {
 });
 
 // 5. Look up participant status (public / student friendly)
-app.get('/api/status/:query', (req, res) => {
+app.get('/api/status/:query', async (req, res) => {
   try {
     const query = req.params.query;
     if (!query) {
       return res.status(400).json({ error: 'Search query is required.' });
     }
 
-    const record = findRegistration(query);
+    const record = await findRegistrationAsync(query);
     if (!record) {
       return res.status(404).json({ error: 'No giveaway registration found for this phone or referral code.' });
     }
@@ -226,6 +230,7 @@ app.get('/api/status/:query', (req, res) => {
       found: true,
       registration: {
         id: record.id,
+        phoneNumber: record.phoneNumber,
         phoneMasked: maskPhone(record.phoneNumber),
         network: record.network,
         fullName: record.fullName,
@@ -235,6 +240,8 @@ app.get('/api/status/:query', (req, res) => {
         shareConfirmed: record.shareConfirmed,
         shareMethod: record.shareMethod,
         shareConfirmedAt: record.shareConfirmedAt,
+        shareClicks: record.shareClicks || 0,
+        notifyAdminClicks: record.notifyAdminClicks || 0,
         status: record.status,
         rewardStatus: record.rewardStatus,
         airtimeAmount: record.airtimeAmount,
@@ -244,6 +251,45 @@ app.get('/api/status/:query', (req, res) => {
   } catch (error: any) {
     console.error('Status lookup error:', error);
     res.status(500).json({ error: error?.message || 'Server error looking up status.' });
+  }
+});
+
+// 6. Track referral link visit
+app.post('/api/track-referral-visit', async (req, res) => {
+  try {
+    const { referralCode } = req.body || {};
+    if (referralCode && String(referralCode).startsWith('MU-')) {
+      await recordReferralVisitAsync(String(referralCode));
+    }
+    res.status(200).json({ success: true });
+  } catch {
+    res.status(200).json({ success: true });
+  }
+});
+
+// 7. Track share click
+app.post('/api/track-share-click', async (req, res) => {
+  try {
+    const { query } = req.body || {};
+    if (query) {
+      await recordShareClickAsync(String(query));
+    }
+    res.status(200).json({ success: true });
+  } catch {
+    res.status(200).json({ success: true });
+  }
+});
+
+// 8. Track admin WhatsApp notification click
+app.post('/api/track-notify-admin', async (req, res) => {
+  try {
+    const { query } = req.body || {};
+    if (query) {
+      await recordNotifyAdminClickAsync(String(query));
+    }
+    res.status(200).json({ success: true });
+  } catch {
+    res.status(200).json({ success: true });
   }
 });
 
@@ -278,13 +324,13 @@ app.post('/api/admin/login', (req, res) => {
 });
 
 // Admin Get Registrations
-app.get('/api/admin/registrations', checkAdminAuth, (_req, res) => {
+app.get('/api/admin/registrations', checkAdminAuth, async (_req, res) => {
   try {
-    const db = readDb();
-    const stats = getGiveawayStats();
+    const list = await getAllRegistrationsAsync();
+    const stats = await getGiveawayStatsAsync();
     res.status(200).json({
       stats,
-      registrations: db.registrations,
+      registrations: list,
     });
   } catch (error: any) {
     console.error('Admin fetch error:', error);
@@ -292,8 +338,8 @@ app.get('/api/admin/registrations', checkAdminAuth, (_req, res) => {
   }
 });
 
-// Admin Update Reward Status
-app.post('/api/admin/update-reward', checkAdminAuth, (req, res) => {
+// Admin Update Reward Status (Approve, Reject, or Mark as Paid)
+app.post('/api/admin/update-reward', checkAdminAuth, async (req, res) => {
   try {
     const { id, rewardStatus, adminNote } = req.body || {};
 
@@ -306,8 +352,7 @@ app.post('/api/admin/update-reward', checkAdminAuth, (req, res) => {
       return res.status(400).json({ error: 'Invalid reward status value.' });
     }
 
-    const db = readDb();
-    const record = db.registrations.find((r) => r.id === id);
+    const record = await findRegistrationAsync(id);
 
     if (!record) {
       return res.status(404).json({ error: 'Registration record not found.' });
@@ -319,12 +364,12 @@ app.post('/api/admin/update-reward', checkAdminAuth, (req, res) => {
     }
     record.updatedAt = new Date().toISOString();
 
-    writeDb(db);
+    const saved = await saveRegistrationAsync(record);
 
     res.status(200).json({
       success: true,
       message: `Reward status updated to ${rewardStatus}.`,
-      registration: record,
+      registration: saved,
     });
   } catch (error: any) {
     console.error('Admin update reward error:', error);
@@ -333,12 +378,12 @@ app.post('/api/admin/update-reward', checkAdminAuth, (req, res) => {
 });
 
 // Admin Export CSV
-app.get('/api/admin/export-csv', checkAdminAuth, (_req, res) => {
+app.get('/api/admin/export-csv', checkAdminAuth, async (_req, res) => {
   try {
-    const db = readDb();
+    const list = await getAllRegistrationsAsync();
     const rows = [
       ['ID', 'Phone Number', 'Network', 'Student Name', 'Status', 'Share Method', 'Share Date', 'Reward Status', 'Admin Note'].join(','),
-      ...db.registrations.map((r) => [
+      ...list.map((r) => [
         `"${r.id}"`,
         `"${r.phoneNumber}"`,
         `"${r.network.toUpperCase()}"`,

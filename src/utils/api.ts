@@ -397,3 +397,30 @@ export async function updateRewardStatus(
     error: result.error || 'Failed to update reward status.',
   };
 }
+
+export async function trackReferralVisit(referralCode: string): Promise<void> {
+  if (!referralCode) return;
+  safeFetchJson('/api/track-referral-visit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ referralCode }),
+  }).catch(() => {});
+}
+
+export async function trackShareClick(query: string): Promise<void> {
+  if (!query) return;
+  safeFetchJson('/api/track-share-click', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  }).catch(() => {});
+}
+
+export async function trackNotifyAdminClick(query: string): Promise<void> {
+  if (!query) return;
+  safeFetchJson('/api/track-notify-admin', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  }).catch(() => {});
+}
