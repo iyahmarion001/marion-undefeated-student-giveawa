@@ -3,7 +3,7 @@ import {
   Gift, Zap, ShieldCheck, ArrowRight, Copy, Check, MessageCircle, 
   ExternalLink, UserCheck 
 } from 'lucide-react';
-import { SUPPORTED_NETWORKS } from '../types/giveaway';
+import { SUPPORTED_NETWORKS, GiveawayStats } from '../types/giveaway';
 import { 
   getOrCreateReferralCode, 
   getReferralLink, 
@@ -11,6 +11,7 @@ import {
   openWhatsAppShare,
   getReferralCodeFromUrl 
 } from '../utils/referral';
+import { fetchGiveawayStats } from '../utils/api';
 
 interface AirtimeAnnouncementProps {
   onOpenParticipate: () => void;
@@ -25,6 +26,14 @@ export const AirtimeAnnouncement: React.FC<AirtimeAnnouncementProps> = ({
   const [referralLink, setReferralLink] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
   const [incomingRef, setIncomingRef] = useState<string | null>(null);
+  const [stats, setStats] = useState<GiveawayStats | null>(null);
+
+  const loadStats = async () => {
+    const data = await fetchGiveawayStats();
+    if (data) {
+      setStats(data);
+    }
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -32,8 +41,24 @@ export const AirtimeAnnouncement: React.FC<AirtimeAnnouncementProps> = ({
       setReferralCode(code);
       setReferralLink(getReferralLink(code));
       setIncomingRef(getReferralCodeFromUrl());
+      loadStats();
+
+      // Poll periodically and on window focus
+      const timer = setInterval(loadStats, 15000);
+      const handleFocus = () => loadStats();
+      window.addEventListener('focus', handleFocus);
+
+      return () => {
+        clearInterval(timer);
+        window.removeEventListener('focus', handleFocus);
+      };
     }
   }, []);
+
+  const totalSlots = stats?.totalSlots || 50;
+  const airtimeCredited = stats?.airtimeCredited || 0;
+  const remainingSlots = stats ? Math.max(0, totalSlots - airtimeCredited) : 50;
+  const isFull = stats !== null && remainingSlots <= 0;
 
   const handleWhatsAppShare = () => {
     const text = buildWhatsAppShareText(referralLink);
@@ -100,13 +125,40 @@ export const AirtimeAnnouncement: React.FC<AirtimeAnnouncementProps> = ({
             className="absolute top-0 right-0 w-56 h-56 bg-yellow-400/10 rounded-full blur-2xl pointer-events-none" 
           />
 
+          {/* Giveaway Full Banner (Requirement 4) */}
+          {isFull && (
+            <div className="mb-4 p-3 rounded-xl bg-red-950/90 border border-red-500 text-red-200 text-xs sm:text-sm font-bold flex items-center justify-between gap-2 shadow-lg">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-400 animate-ping" />
+                <span>GIVEAWAY FULL: All 50 student rewards (₦10,000) have been claimed and distributed!</span>
+              </div>
+              <span className="text-[11px] uppercase bg-red-900/80 px-2 py-0.5 rounded text-white font-black shrink-0">
+                0 Slots Left
+              </span>
+            </div>
+          )}
+
           <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6">
             
             {/* Left: ₦200 Offer Statement */}
             <div className="text-center md:text-left flex-1 w-full">
-              <span className="text-[11px] sm:text-xs uppercase font-bold tracking-wider text-yellow-400">
-                Official Giveaway Drop
-              </span>
+              
+              {/* Prominent Live Available Rewards Counter Badge (Requirement 4) */}
+              <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] sm:text-xs font-black uppercase tracking-wider mb-2 border shadow-sm ${
+                isFull
+                  ? 'bg-red-500/20 text-red-300 border-red-500/40'
+                  : remainingSlots <= 10
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-400/50 animate-pulse'
+                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40'
+              }`}>
+                <Zap className="w-3.5 h-3.5 fill-current" />
+                <span>
+                  {isFull
+                    ? 'GIVEAWAY FULL · 0 OF 50 SLOTS REMAINING'
+                    : `${remainingSlots} OF 50 AIRTIME REWARDS REMAINING`}
+                </span>
+              </div>
+
               <div className="mt-0.5 flex items-baseline justify-center md:justify-start gap-2">
                 <span className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight">
                   ₦200
@@ -116,7 +168,7 @@ export const AirtimeAnnouncement: React.FC<AirtimeAnnouncementProps> = ({
                 </span>
               </div>
               <p className="mt-1.5 text-xs sm:text-sm text-slate-200 leading-relaxed max-w-md mx-auto md:mx-0">
-                Direct mobile airtime for students across all major telecom networks in Nigeria. 100% free of charge.
+                Direct mobile airtime for students across all major telecom networks in Nigeria. 100% free of charge. Each reward paid reduces the 50 slots by exactly 1.
               </p>
 
               {/* Supported Networks Pills */}
@@ -148,14 +200,14 @@ export const AirtimeAnnouncement: React.FC<AirtimeAnnouncementProps> = ({
 
             {/* Right: Quick Action & Slot Summary */}
             <div className="w-full md:w-auto flex flex-col items-center gap-2 shrink-0">
-              {/* Desktop-only quota box to avoid repeated explanations on mobile */}
-              <div className="hidden md:block w-64 p-3.5 rounded-xl bg-[#040e24]/80 border border-blue-600/40 text-center">
-                <div className="text-xs text-blue-300 font-medium">Airtime Allocation</div>
-                <div className="text-2xl font-black text-white tabular-nums mt-0.5">
-                  50 Students
+              {/* Dynamic Live Quota Box (Requirement 4) */}
+              <div className="w-full sm:w-64 p-3.5 rounded-xl bg-[#040e24]/90 border border-blue-600/50 text-center shadow-inner">
+                <div className="text-xs text-blue-300 font-medium">Live Available Rewards</div>
+                <div className={`text-2xl font-black tabular-nums mt-0.5 ${isFull ? 'text-red-400' : 'text-white'}`}>
+                  {isFull ? 'Giveaway Full' : `${remainingSlots} Slots Left`}
                 </div>
                 <div className="text-[11px] text-yellow-400 font-semibold mt-1">
-                  ₦200 Per Student · 100% Free
+                  {airtimeCredited} of 50 Paid ({Math.round((airtimeCredited / totalSlots) * 100)}% Claimed)
                 </div>
               </div>
 
@@ -163,10 +215,14 @@ export const AirtimeAnnouncement: React.FC<AirtimeAnnouncementProps> = ({
               <button
                 onClick={onOpenParticipate}
                 type="button"
-                className="tap-bounce w-full sm:w-64 py-3 sm:py-3.5 px-5 bg-gradient-to-r from-yellow-400 to-amber-400 hover:from-yellow-300 hover:to-amber-300 text-slate-950 font-black text-sm sm:text-base rounded-xl shadow-lg shadow-yellow-500/30 flex items-center justify-center gap-2 cursor-pointer transition-all border border-yellow-300"
+                className={`tap-bounce w-full sm:w-64 py-3 sm:py-3.5 px-5 font-black text-sm sm:text-base rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-all border ${
+                  isFull
+                    ? 'bg-blue-900/80 hover:bg-blue-800 text-yellow-300 border-yellow-400/50'
+                    : 'bg-gradient-to-r from-yellow-400 to-amber-400 hover:from-yellow-300 hover:to-amber-300 text-slate-950 shadow-yellow-500/30 border-yellow-300'
+                }`}
               >
-                <span>Participate Now</span>
-                <ArrowRight className="w-4 h-4 text-slate-950" />
+                <span>{isFull ? 'Check Participation Status' : 'Participate Now'}</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
 
               {/* Official Share on WhatsApp Button */}
@@ -247,14 +303,14 @@ export const AirtimeAnnouncement: React.FC<AirtimeAnnouncementProps> = ({
                 </div>
               </div>
 
-              {/* Card 3: Total Beneficiaries */}
+              {/* Card 3: Remaining Available Slots (Requirement 4) */}
               <div className="p-4 rounded-xl bg-[#061430] border border-blue-800/50">
-                <div className="text-xs font-medium text-blue-300">Total Student Rewards</div>
-                <div className="text-2xl sm:text-3xl font-black text-cyan-300 tabular-nums mt-1">
-                  50 Slots
+                <div className="text-xs font-medium text-blue-300">Remaining Available Rewards</div>
+                <div className={`text-2xl sm:text-3xl font-black tabular-nums mt-1 ${isFull ? 'text-red-400' : 'text-cyan-300'}`}>
+                  {isFull ? '0 Slots' : `${remainingSlots} Slots`}
                 </div>
                 <div className="text-[11px] text-slate-300 mt-1">
-                  50 rewards of ₦200 each (₦10,000 ÷ ₦200 = 50).
+                  {airtimeCredited} paid · {remainingSlots} remaining (₦{remainingSlots * 200} budget left).
                 </div>
               </div>
             </div>
@@ -265,27 +321,44 @@ export const AirtimeAnnouncement: React.FC<AirtimeAnnouncementProps> = ({
                 <span className="font-semibold text-slate-200">
                   Reward Quota Visualization: 50 Student Slots
                 </span>
-                <span className="text-yellow-400 font-bold tabular-nums">
-                  50 / 50 Available for Drop
+                <span className={`font-bold tabular-nums ${isFull ? 'text-red-400' : 'text-yellow-400'}`}>
+                  {remainingSlots} / 50 Available ({airtimeCredited} Paid)
                 </span>
               </div>
 
-              {/* 50 visual slot dots grid */}
+              {/* 50 visual slot dots grid (Credited slots turn emerald / checkmark) */}
               <div className="grid grid-cols-10 gap-1.5 sm:gap-2">
-                {Array.from({ length: 50 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-3.5 sm:h-4 rounded-sm bg-gradient-to-r from-yellow-400/80 to-amber-500/80 border border-yellow-300/40 flex items-center justify-center text-[8px] font-bold text-slate-950"
-                    title={`Slot #${i + 1}: ₦200 Airtime`}
-                  >
-                    <span className="hidden sm:inline">{i + 1}</span>
-                  </div>
-                ))}
+                {Array.from({ length: 50 }).map((_, i) => {
+                  const isPaid = i < airtimeCredited;
+                  return (
+                    <div
+                      key={i}
+                      className={`h-3.5 sm:h-4 rounded-sm flex items-center justify-center text-[8px] font-bold border transition-colors ${
+                        isPaid
+                          ? 'bg-emerald-500 border-emerald-300 text-slate-950'
+                          : 'bg-gradient-to-r from-yellow-400/80 to-amber-500/80 border-yellow-300/40 text-slate-950'
+                      }`}
+                      title={`Slot #${i + 1}: ${isPaid ? '₦200 Paid to Student' : '₦200 Airtime Available'}`}
+                    >
+                      <span className="hidden sm:inline">{isPaid ? 'PAID' : i + 1}</span>
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400">
-                <span>Each slot = ₦200 direct airtime</span>
-                <span className="text-blue-300">First-come basis upon drop activation</span>
+                <span className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" />
+                    <span className="text-emerald-300 font-bold">{airtimeCredited} Paid</span>
+                  </span>
+                  <span>·</span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-yellow-400 inline-block" />
+                    <span className="text-yellow-300 font-bold">{remainingSlots} Available</span>
+                  </span>
+                </span>
+                <span className="text-blue-300">Strict 50-slot budget (₦10,000 max)</span>
               </div>
             </div>
           </div>

@@ -82,6 +82,9 @@ export interface ParticipantRegistration {
   rewardStatus: RewardStatus;
   airtimeAmount: number;
   adminNote?: string | null;
+  adminNotified?: boolean;
+  adminNotifiedAt?: string | null;
+  notifyError?: string | null;
   updatedAt?: string;
 }
 

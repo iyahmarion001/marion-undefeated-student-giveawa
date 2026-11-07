@@ -7,10 +7,12 @@ import {
   recordReferralVisitAsync,
   recordShareClickAsync,
   recordNotifyAdminClickAsync,
+  markRewardAsPaidAtomicAsync,
   normalizeNigerianPhone,
   maskPhone,
   type Registration
 } from './db';
+import { sendDirectWhatsAppNotification } from './whatsapp';
 
 export const app = express();
 
@@ -293,6 +295,139 @@ app.post('/api/track-notify-admin', async (req, res) => {
   }
 });
 
+// 9. Direct Admin WhatsApp Notification (Official WhatsApp Cloud API / Provider)
+// Sends details directly to admin WhatsApp 08057231961 (2348057231961) without redirecting the student
+app.post('/api/notify-admin-direct', async (req, res) => {
+  try {
+    const { id, phoneNumber, referralCode } = req.body || {};
+    const query = id || phoneNumber || referralCode;
+
+    if (!query) {
+      return res.status(400).json({ error: 'Registration ID, phone number, or referral code is required.' });
+    }
+
+    const record = await findRegistrationAsync(String(query));
+
+    if (!record) {
+      return res.status(404).json({ error: 'No matching registration record found.' });
+    }
+
+    // Check if duplicate notification
+    if (record.adminNotified) {
+      return res.status(200).json({
+        success: true,
+        sent: true,
+        configured: true,
+        alreadyNotified: true,
+        message: `Admin was already notified of this registration on ${new Date(record.adminNotifiedAt || Date.now()).toLocaleString()}.`,
+        registration: {
+          id: record.id,
+          phoneNumber: record.phoneNumber,
+          phoneMasked: maskPhone(record.phoneNumber),
+          network: record.network,
+          fullName: record.fullName,
+          referralCode: record.referralCode,
+          registeredAt: record.registeredAt,
+          shareConfirmed: record.shareConfirmed,
+          shareMethod: record.shareMethod,
+          shareConfirmedAt: record.shareConfirmedAt,
+          status: record.status,
+          rewardStatus: record.rewardStatus,
+          airtimeAmount: record.airtimeAmount,
+          adminNotified: record.adminNotified,
+          adminNotifiedAt: record.adminNotifiedAt,
+        },
+      });
+    }
+
+    // Dispatch direct notification to Admin (08057231961)
+    const result = await sendDirectWhatsAppNotification({
+      registrationId: record.id,
+      phoneNumber: record.phoneNumber,
+      network: record.network,
+      airtimeAmount: record.airtimeAmount || 200,
+      referralCode: record.referralCode,
+      status: record.status,
+      shareMethod: record.shareMethod,
+    });
+
+    if (result.sent) {
+      record.adminNotified = true;
+      record.adminNotifiedAt = new Date().toISOString();
+      record.notifyError = null;
+      record.notifyAdminClicks = (record.notifyAdminClicks || 0) + 1;
+      record.updatedAt = new Date().toISOString();
+
+      const saved = await saveRegistrationAsync(record);
+
+      return res.status(200).json({
+        success: true,
+        sent: true,
+        configured: true,
+        provider: result.provider,
+        messageId: result.messageId,
+        message: 'Registration details sent directly to Administrator WhatsApp (08057231961)!',
+        registration: {
+          id: saved.id,
+          phoneNumber: saved.phoneNumber,
+          phoneMasked: maskPhone(saved.phoneNumber),
+          network: saved.network,
+          fullName: saved.fullName,
+          referralCode: saved.referralCode,
+          registeredAt: saved.registeredAt,
+          shareConfirmed: saved.shareConfirmed,
+          shareMethod: saved.shareMethod,
+          shareConfirmedAt: saved.shareConfirmedAt,
+          status: saved.status,
+          rewardStatus: saved.rewardStatus,
+          airtimeAmount: saved.airtimeAmount,
+          adminNotified: saved.adminNotified,
+          adminNotifiedAt: saved.adminNotifiedAt,
+        },
+      });
+    } else {
+      record.notifyError = result.error || 'Failed to dispatch notification';
+      record.notifyAdminClicks = (record.notifyAdminClicks || 0) + 1;
+      record.updatedAt = new Date().toISOString();
+
+      const saved = await saveRegistrationAsync(record);
+
+      return res.status(200).json({
+        success: false,
+        sent: false,
+        configured: result.configured,
+        provider: result.provider,
+        error: result.error,
+        requiredConfig: result.requiredConfig,
+        message: result.configured
+          ? `Direct dispatch failed: ${result.error}`
+          : 'Direct WhatsApp Cloud API credentials required on server for automated delivery.',
+        registration: {
+          id: saved.id,
+          phoneNumber: saved.phoneNumber,
+          phoneMasked: maskPhone(saved.phoneNumber),
+          network: saved.network,
+          fullName: saved.fullName,
+          referralCode: saved.referralCode,
+          registeredAt: saved.registeredAt,
+          shareConfirmed: saved.shareConfirmed,
+          shareMethod: saved.shareMethod,
+          shareConfirmedAt: saved.shareConfirmedAt,
+          status: saved.status,
+          rewardStatus: saved.rewardStatus,
+          airtimeAmount: saved.airtimeAmount,
+          adminNotified: saved.adminNotified,
+          adminNotifiedAt: saved.adminNotifiedAt,
+          notifyError: saved.notifyError,
+        },
+      });
+    }
+  } catch (error: any) {
+    console.error('Direct admin notification error:', error);
+    res.status(500).json({ error: error?.message || 'Server error while sending admin notification.' });
+  }
+});
+
 // Administrator Auth Middleware
 const checkAdminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;
@@ -357,6 +492,19 @@ app.post('/api/admin/update-reward', checkAdminAuth, async (req, res) => {
     const validStatuses = ['pending_review', 'approved', 'credited', 'declined'];
     if (!validStatuses.includes(rewardStatus)) {
       return res.status(400).json({ error: 'Invalid reward status value.' });
+    }
+
+    // Atomic disburse logic for 'credited' (Requirement 4: concurrency safe & max 50 slots)
+    if (rewardStatus === 'credited') {
+      const atomicResult = await markRewardAsPaidAtomicAsync(id, adminNote);
+      if (!atomicResult.success) {
+        return res.status(400).json({ error: atomicResult.error || 'Failed to disburse reward slot.' });
+      }
+      return res.status(200).json({
+        success: true,
+        message: 'Reward status updated to credited (1 of 50 slots consumed).',
+        registration: atomicResult.registration,
+      });
     }
 
     const record = await findRegistrationAsync(id);

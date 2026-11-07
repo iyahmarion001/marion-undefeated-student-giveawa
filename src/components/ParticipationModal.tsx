@@ -30,7 +30,8 @@ import {
   saveStoredRegistration,
   trackReferralVisit,
   trackShareClick,
-  trackNotifyAdminClick
+  trackNotifyAdminClick,
+  notifyAdminDirectly
 } from '../utils/api';
 
 interface ParticipationModalProps {
@@ -71,6 +72,8 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedMessage, setCopiedMessage] = useState(false);
   const [copiedAdminProof, setCopiedAdminProof] = useState(false);
+  const [isDirectNotifying, setIsDirectNotifying] = useState(false);
+  const [directNotifyResult, setDirectNotifyResult] = useState<any>(null);
 
   // Status lookup state
   const [lookupQuery, setLookupQuery] = useState('');
@@ -308,6 +311,43 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
         onShowToast(`Proof message copied! Send it to ${ADMIN_NOTIFICATION_NUMBER} in WhatsApp.`);
         setTimeout(() => setCopiedAdminProof(false), 2500);
       });
+    }
+  };
+
+  // Direct Admin Notification (Sends directly via Cloud API without redirecting student)
+  const handleDirectNotifyAdmin = async () => {
+    if (!currentRegistration) return;
+
+    if (currentRegistration.adminNotified || directNotifyResult?.alreadyNotified) {
+      onShowToast('Administrator has already received your registration notification.');
+      return;
+    }
+
+    setIsDirectNotifying(true);
+    setDirectNotifyResult(null);
+
+    const res = await notifyAdminDirectly({
+      id: currentRegistration.id,
+      phoneNumber: currentRegistration.phoneNumber,
+      referralCode: currentRegistration.referralCode,
+    });
+
+    setIsDirectNotifying(false);
+    setDirectNotifyResult(res);
+
+    if (res.registration) {
+      setCurrentRegistration(res.registration);
+      saveStoredRegistration(res.registration);
+    }
+
+    if (res.sent) {
+      onShowToast(`Delivered directly to Admin WhatsApp ${ADMIN_NOTIFICATION_NUMBER}!`);
+    } else if (res.alreadyNotified) {
+      onShowToast('Admin was already notified earlier.');
+    } else if (!res.configured) {
+      onShowToast('Direct automated dispatch requires Meta Cloud API credentials in server environment.');
+    } else {
+      onShowToast(res.error || 'Failed to dispatch notification directly.');
     }
   };
 
@@ -1000,48 +1040,115 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
                     </div>
                   )}
 
-                  {/* Section C: Notify Administrator via WhatsApp (2348057231961) */}
-                  <div className="mt-3 p-3.5 rounded-xl bg-[#051126] border border-emerald-500/60 space-y-2.5">
+                  {/* Section C: DIRECT ADMIN WHATSAPP NOTIFICATION (08057231961 / 2348057231961) */}
+                  <div className="mt-3 p-3.5 rounded-xl bg-[#051126] border border-emerald-500/60 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-white flex items-center gap-1.5">
                         <MessageCircle className="w-4 h-4 text-emerald-400" />
-                        <span>Notify Administrator via WhatsApp</span>
+                        <span>Direct Admin WhatsApp Notification</span>
                       </span>
                       <span className="text-[10px] text-emerald-300 font-mono bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-700/50">
-                        {ADMIN_NOTIFICATION_NUMBER}
+                        {ADMIN_NOTIFICATION_NUMBER} (08057231961)
                       </span>
                     </div>
 
                     <p className="text-[11px] text-slate-300 leading-relaxed">
-                      Speed up your review by sending your pre-filled registration and proof directly to the administrator on WhatsApp.
+                      Send your completed giveaway entry details directly to the administrator's WhatsApp number ({ADMIN_NOTIFICATION_NUMBER}) for manual review and airtime crediting.
                     </p>
 
-                    <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                    {/* Direct Admin Notification Status Alert */}
+                    {(currentRegistration.adminNotified || directNotifyResult?.sent || directNotifyResult?.alreadyNotified) && (
+                      <div className="p-2.5 rounded-xl bg-emerald-950/80 border border-emerald-500/70 text-emerald-200 text-xs flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <div>
+                          <strong className="text-white block">Administrator Notified Directly</strong>
+                          <span className="text-[11px] text-emerald-300">
+                            Notification recorded and sent to Admin WhatsApp ({ADMIN_NOTIFICATION_NUMBER}). Duplicate notifications prevented.
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Notification Error or Missing Credentials Warning */}
+                    {directNotifyResult && !directNotifyResult.sent && !directNotifyResult.alreadyNotified && (
+                      <div className="p-2.5 rounded-xl bg-amber-950/60 border border-amber-600/50 text-amber-200 text-xs space-y-1">
+                        <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>
+                            {directNotifyResult.configured
+                              ? 'Cloud API Dispatch Notice'
+                              : 'Meta WhatsApp Cloud API Configuration Required'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-300">
+                          {directNotifyResult.configured
+                            ? directNotifyResult.error
+                            : 'Direct automated dispatch requires Meta WhatsApp Business Cloud API credentials configured in server environment (WHATSAPP_ACCESS_TOKEN & WHATSAPP_PHONE_NUMBER_ID).'}
+                        </p>
+                        {directNotifyResult.requiredConfig && (
+                          <div className="text-[10px] font-mono text-amber-300 bg-black/40 p-1.5 rounded space-y-0.5">
+                            {directNotifyResult.requiredConfig.map((item: string, idx: number) => (
+                              <div key={idx}>• {item}</div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* THE PROMINENT "NOTIFY ADMIN" BUTTON */}
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={handleDirectNotifyAdmin}
+                        disabled={isDirectNotifying || currentRegistration.adminNotified || directNotifyResult?.sent || directNotifyResult?.alreadyNotified}
+                        className={`tap-bounce w-full py-3 px-4 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer border ${
+                          currentRegistration.adminNotified || directNotifyResult?.sent || directNotifyResult?.alreadyNotified
+                            ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 cursor-not-allowed opacity-90'
+                            : 'bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500 text-slate-950 hover:from-emerald-400 hover:to-teal-300 shadow-lg shadow-emerald-950/70 border-emerald-300'
+                        }`}
+                      >
+                        {isDirectNotifying ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                            <span>Sending to Admin ({ADMIN_NOTIFICATION_NUMBER})...</span>
+                          </>
+                        ) : currentRegistration.adminNotified || directNotifyResult?.sent || directNotifyResult?.alreadyNotified ? (
+                          <>
+                            <CheckCircle className="w-4 h-4 text-emerald-400" />
+                            <span>ADMIN NOTIFIED (Direct WhatsApp Recorded)</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4 fill-slate-950 text-emerald-900" />
+                            <span>NOTIFY ADMIN</span>
+                          </>
+                        )}
+                      </button>
+
+                      <p className="text-[10px] text-center text-slate-400">
+                        Sends student phone number, network, ₦200 airtime request, registration ID, and sharing proof directly to administrator WhatsApp 08057231961 without opening an external chat.
+                      </p>
+                    </div>
+
+                    {/* Manual Fallback Option if student also wants to open WhatsApp directly */}
+                    <div className="pt-2 border-t border-blue-900/60 flex items-center justify-between text-xs">
                       <button
                         type="button"
                         onClick={handleNotifyAdminWhatsApp}
-                        className="tap-bounce flex-1 py-2.5 px-3 rounded-xl bg-[#25D366] hover:bg-[#20ba59] active:bg-[#1da850] text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950/50 cursor-pointer border border-emerald-300/40"
+                        className="text-blue-300 hover:text-white underline cursor-pointer flex items-center gap-1 text-[11px]"
                       >
-                        <Send className="w-3.5 h-3.5 fill-slate-950 text-emerald-700" />
-                        <span>Notify Admin ({ADMIN_NOTIFICATION_NUMBER})</span>
-                        <ExternalLink className="w-3 h-3 opacity-70" />
+                        <ExternalLink className="w-3 h-3 text-emerald-400" />
+                        <span>Or open WhatsApp directly ({ADMIN_NOTIFICATION_NUMBER})</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={handleCopyAdminProof}
-                        className="tap-bounce py-2 px-3 rounded-xl bg-blue-950 hover:bg-blue-900 border border-blue-700/60 text-blue-200 text-xs font-semibold flex items-center justify-center gap-1 cursor-pointer"
+                        className="text-slate-400 hover:text-yellow-400 cursor-pointer flex items-center gap-1 text-[11px]"
                       >
-                        <Copy className="w-3.5 h-3.5 text-yellow-400" />
-                        <span>{copiedAdminProof ? 'Proof Copied!' : 'Copy Proof Text'}</span>
+                        <Copy className="w-3 h-3 text-yellow-400" />
+                        <span>{copiedAdminProof ? 'Proof Copied!' : 'Copy Proof Message'}</span>
                       </button>
-                    </div>
-
-                    <div className="text-[10px] text-amber-200/90 bg-amber-950/40 border border-amber-600/30 p-2 rounded-lg flex items-start gap-1.5">
-                      <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                      <span>
-                        <strong>Delivery Note:</strong> WhatsApp will open addressed to <strong>{ADMIN_NOTIFICATION_NUMBER}</strong> with your prefilled details. You must press <strong>Send</strong> inside WhatsApp to deliver your notification.
-                      </span>
                     </div>
                   </div>
 

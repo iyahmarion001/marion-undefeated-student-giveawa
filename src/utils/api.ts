@@ -424,3 +424,52 @@ export async function trackNotifyAdminClick(query: string): Promise<void> {
     body: JSON.stringify({ query }),
   }).catch(() => {});
 }
+
+export async function notifyAdminDirectly(payload: {
+  id?: string;
+  phoneNumber?: string;
+  referralCode?: string;
+}): Promise<{
+  success: boolean;
+  sent: boolean;
+  configured: boolean;
+  alreadyNotified?: boolean;
+  message?: string;
+  error?: string;
+  requiredConfig?: string[];
+  provider?: string;
+  messageId?: string;
+  registration?: ParticipantRegistration;
+}> {
+  const result = await safeFetchJson<{
+    success: boolean;
+    sent: boolean;
+    configured: boolean;
+    alreadyNotified?: boolean;
+    message?: string;
+    error?: string;
+    requiredConfig?: string[];
+    provider?: string;
+    messageId?: string;
+    registration?: ParticipantRegistration;
+  }>('/api/notify-admin-direct', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (result.ok && result.data) {
+    if (result.data.registration) {
+      saveStoredRegistration(result.data.registration);
+    }
+    return result.data;
+  }
+
+  return {
+    success: false,
+    sent: false,
+    configured: false,
+    error: result.error || 'Failed to dispatch notification to administrator.',
+  };
+}
+

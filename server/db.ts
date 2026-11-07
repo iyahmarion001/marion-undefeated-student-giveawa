@@ -24,6 +24,9 @@ export interface Registration {
   rewardStatus: 'pending_review' | 'approved' | 'credited' | 'declined';
   airtimeAmount: number; // 200
   adminNote?: string | null;
+  adminNotified?: boolean;
+  adminNotifiedAt?: string | null;
+  notifyError?: string | null;
   updatedAt: string;
 }
 
@@ -94,6 +97,11 @@ async function initPgTables(): Promise<void> {
           referral_code VARCHAR(32) NOT NULL,
           visited_at TIMESTAMPTZ NOT NULL
         );
+
+        -- Safe column migrations for direct admin WhatsApp notification
+        ALTER TABLE giveaway_registrations ADD COLUMN IF NOT EXISTS admin_notified BOOLEAN DEFAULT FALSE;
+        ALTER TABLE giveaway_registrations ADD COLUMN IF NOT EXISTS admin_notified_at TIMESTAMPTZ;
+        ALTER TABLE giveaway_registrations ADD COLUMN IF NOT EXISTS notify_error TEXT;
       `);
       pgInitialized = true;
       console.log('PostgreSQL giveaway_registrations table verified.');
@@ -187,6 +195,9 @@ function mapPgRowToRegistration(row: any): Registration {
     rewardStatus: row.reward_status,
     airtimeAmount: Number(row.airtime_amount || 200),
     adminNote: row.admin_note || null,
+    adminNotified: Boolean(row.admin_notified),
+    adminNotifiedAt: row.admin_notified_at ? (row.admin_notified_at instanceof Date ? row.admin_notified_at.toISOString() : String(row.admin_notified_at)) : null,
+    notifyError: row.notify_error || null,
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
   };
 }
@@ -220,9 +231,10 @@ export async function saveRegistrationAsync(reg: Registration): Promise<Registra
         INSERT INTO giveaway_registrations (
           id, phone_number, network, full_name, department, referral_code, referred_by,
           registered_at, share_confirmed, share_method, share_confirmed_at, share_clicks,
-          notify_admin_clicks, status, reward_status, airtime_amount, admin_note, updated_at
+          notify_admin_clicks, status, reward_status, airtime_amount, admin_note,
+          admin_notified, admin_notified_at, notify_error, updated_at
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21
         )
         ON CONFLICT (phone_number) DO UPDATE SET
           network = EXCLUDED.network,
@@ -236,6 +248,9 @@ export async function saveRegistrationAsync(reg: Registration): Promise<Registra
           status = EXCLUDED.status,
           reward_status = EXCLUDED.reward_status,
           admin_note = EXCLUDED.admin_note,
+          admin_notified = EXCLUDED.admin_notified,
+          admin_notified_at = EXCLUDED.admin_notified_at,
+          notify_error = EXCLUDED.notify_error,
           updated_at = EXCLUDED.updated_at
         RETURNING *;
       `;
@@ -258,6 +273,9 @@ export async function saveRegistrationAsync(reg: Registration): Promise<Registra
         reg.rewardStatus,
         reg.airtimeAmount || 200,
         reg.adminNote || null,
+        reg.adminNotified ?? false,
+        reg.adminNotifiedAt || null,
+        reg.notifyError || null,
         reg.updatedAt,
       ];
 
@@ -278,6 +296,80 @@ export async function saveRegistrationAsync(reg: Registration): Promise<Registra
   }
   writeDb(db);
   return reg;
+}
+
+/**
+ * Concurrency-safe atomic update to mark a registration as PAID (credited).
+ * Prevents two administrators from accidentally allocating beyond the 50 slots!
+ */
+export async function markRewardAsPaidAtomicAsync(
+  id: string,
+  adminNote?: string
+): Promise<{ success: boolean; registration?: Registration; error?: string }> {
+  if (pgPool) {
+    try {
+      await initPgTables();
+
+      // Check current paid count excluding this id
+      const countRes = await pgPool.query(
+        "SELECT COUNT(*) AS count FROM giveaway_registrations WHERE reward_status = 'credited' AND id != $1",
+        [id]
+      );
+      const currentlyPaid = parseInt(countRes.rows[0].count, 10) || 0;
+
+      if (currentlyPaid >= 50) {
+        return {
+          success: false,
+          error: 'Giveaway quota filled: All 50 airtime rewards have already been marked as paid and disbursed.',
+        };
+      }
+
+      // Update record atomically
+      const noteUpdate = adminNote !== undefined ? adminNote : `₦200 airtime credited by admin on ${new Date().toLocaleDateString()}`;
+      const updateRes = await pgPool.query(
+        `UPDATE giveaway_registrations 
+         SET reward_status = 'credited', admin_note = $1, updated_at = NOW() 
+         WHERE id = $2 
+         RETURNING *`,
+        [noteUpdate, id]
+      );
+
+      if (updateRes.rowCount === 0) {
+        return { success: false, error: 'Registration record not found.' };
+      }
+
+      return {
+        success: true,
+        registration: mapPgRowToRegistration(updateRes.rows[0]),
+      };
+    } catch (err: any) {
+      console.error('PostgreSQL atomic reward payment error:', err);
+      return { success: false, error: err?.message || 'Database error processing reward payment.' };
+    }
+  }
+
+  // Local fallback
+  const db = readDb();
+  const currentlyPaid = db.registrations.filter((r) => r.rewardStatus === 'credited' && r.id !== id).length;
+
+  if (currentlyPaid >= 50) {
+    return {
+      success: false,
+      error: 'Giveaway quota filled: All 50 airtime rewards have already been marked as paid and disbursed.',
+    };
+  }
+
+  const rec = db.registrations.find((r) => r.id === id);
+  if (!rec) {
+    return { success: false, error: 'Registration record not found.' };
+  }
+
+  rec.rewardStatus = 'credited';
+  if (adminNote !== undefined) rec.adminNote = adminNote;
+  rec.updatedAt = new Date().toISOString();
+  writeDb(db);
+
+  return { success: true, registration: rec };
 }
 
 /**

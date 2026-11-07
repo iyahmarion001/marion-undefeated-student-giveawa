@@ -40,6 +40,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [statusFilter, setStatusFilter] = useState('all');
 
   const [copiedPhone, setCopiedPhone] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
 
@@ -97,8 +98,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (navigator?.clipboard) {
       navigator.clipboard.writeText(phone).then(() => {
         setCopiedPhone(phone);
-        onShowToast(`Copied ${phone} for manual airtime top-up!`);
+        onShowToast(`Copied phone number ${phone} for airtime recharge!`);
         setTimeout(() => setCopiedPhone(null), 2500);
+      });
+    }
+  };
+
+  const handleCopyId = (id: string) => {
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(id).then(() => {
+        setCopiedId(id);
+        onShowToast(`Copied Registration ID: ${id}`);
+        setTimeout(() => setCopiedId(null), 2500);
       });
     }
   };
@@ -483,6 +494,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               {copiedPhone === reg.phoneNumber ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                             </button>
                           </div>
+                          <div className="flex items-center gap-1 text-[11px] text-blue-300 font-mono mt-0.5">
+                            <span className="text-slate-400">ID:</span>
+                            <span className="truncate max-w-[130px]">{reg.id}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyId(reg.id)}
+                              className="p-0.5 rounded text-slate-400 hover:text-white"
+                              title="Copy Registration ID"
+                            >
+                              {copiedId === reg.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                          </div>
                           {reg.fullName && (
                             <div className="text-xs text-slate-300 mt-0.5">
                               {reg.fullName} {reg.department && `(${reg.department})`}
@@ -658,6 +681,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   title="Chat with student on WhatsApp"
                                 >
                                   <MessageCircle className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              <div className="flex items-center gap-1 text-[11px] text-blue-300 font-mono mt-0.5">
+                                <span className="text-slate-400">ID:</span>
+                                <span>{reg.id}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyId(reg.id)}
+                                  className="tap-bounce p-0.5 rounded hover:bg-blue-800/60 text-slate-400 hover:text-white cursor-pointer"
+                                  title="Copy Registration ID"
+                                >
+                                  {copiedId === reg.id ? (
+                                    <Check className="w-3 h-3 text-emerald-400" />
+                                  ) : (
+                                    <Copy className="w-3 h-3" />
+                                  )}
                                 </button>
                               </div>
                               {reg.fullName && (
