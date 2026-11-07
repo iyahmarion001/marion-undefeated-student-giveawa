@@ -22,6 +22,31 @@ interface AdminDashboardProps {
   onShowToast: (message: string) => void;
 }
 
+const safeNetworkUpper = (net?: string | null) => {
+  if (!net) return 'UNKNOWN';
+  return String(net).toUpperCase();
+};
+
+const safeFormatDate = (dateStr?: string | null) => {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? String(dateStr) : d.toLocaleDateString();
+  } catch {
+    return '—';
+  }
+};
+
+const safeFormatDateTime = (dateStr?: string | null) => {
+  if (!dateStr) return '—';
+  try {
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? String(dateStr) : d.toLocaleString();
+  } catch {
+    return '—';
+  }
+};
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   isOpen,
   onClose,
@@ -35,6 +60,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [registrations, setRegistrations] = useState<any[]>([]);
   const [stats, setStats] = useState<GiveawayStats | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [networkFilter, setNetworkFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -46,20 +72,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const loadData = async (activeToken: string) => {
     setIsLoading(true);
-    const result = await fetchAdminRegistrations(activeToken);
-    if (result.success && result.registrations) {
-      setRegistrations(result.registrations);
-      if (result.stats) setStats(result.stats);
-    } else {
-      if (result.error?.includes('Unauthorized')) {
-        clearAdminToken();
-        setToken(null);
-        onShowToast('Session expired. Please log in again.');
+    setFetchError(null);
+    try {
+      const result = await fetchAdminRegistrations(activeToken);
+      if (result.success && result.registrations) {
+        setRegistrations(Array.isArray(result.registrations) ? result.registrations : []);
+        if (result.stats) setStats(result.stats);
       } else {
-        onShowToast(result.error || 'Failed to load records.');
+        if (result.error?.includes('Unauthorized')) {
+          clearAdminToken();
+          setToken(null);
+          onShowToast('Session expired. Please log in again.');
+        } else {
+          setFetchError(result.error || 'Failed to load records.');
+          onShowToast(result.error || 'Failed to load records.');
+        }
       }
+    } catch (err: any) {
+      setFetchError(err?.message || 'Network error while contacting admin endpoint.');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -159,19 +192,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     window.open(`https://wa.me/${clean}?text=${message}`, '_blank');
   };
 
+  // Safe registration list
+  const list = Array.isArray(registrations) ? registrations.filter(Boolean) : [];
+
   // Filter registrations
-  const filtered = registrations.filter((reg) => {
-    const matchesSearch =
-      reg.phoneNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      reg.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      reg.referralCode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      reg.referredBy?.toLowerCase().includes(searchQuery.toLowerCase());
+  const filtered = list.filter((reg) => {
+    if (!reg) return false;
+    const phone = String(reg.phoneNumber || '');
+    const name = String(reg.fullName || '');
+    const ref = String(reg.referralCode || '');
+    const by = String(reg.referredBy || '');
+    const q = searchQuery.toLowerCase().trim();
+
+    const matchesSearch = !q ||
+      phone.toLowerCase().includes(q) ||
+      name.toLowerCase().includes(q) ||
+      ref.toLowerCase().includes(q) ||
+      by.toLowerCase().includes(q);
 
     const matchesNetwork = networkFilter === 'all' || reg.network === networkFilter;
 
     let matchesStatus = true;
     if (statusFilter === 'pending_review') {
-      matchesStatus = reg.rewardStatus === 'pending_review' && reg.shareConfirmed;
+      matchesStatus = reg.rewardStatus === 'pending_review' && Boolean(reg.shareConfirmed);
     } else if (statusFilter === 'approved') {
       matchesStatus = reg.rewardStatus === 'approved';
     } else if (statusFilter === 'credited') {
@@ -186,11 +229,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   });
 
   // Calculate dynamic stats
-  const totalCount = stats?.totalRegistered ?? registrations.length;
-  const pendingCount = stats?.pendingReview ?? registrations.filter((r) => r.shareConfirmed && r.rewardStatus === 'pending_review').length;
-  const approvedCount = stats?.approvedEntries ?? registrations.filter((r) => r.rewardStatus === 'approved').length;
-  const creditedCount = stats?.airtimeCredited ?? registrations.filter((r) => r.rewardStatus === 'credited').length;
-  const declinedCount = stats?.rejectedEntries ?? registrations.filter((r) => r.rewardStatus === 'declined').length;
+  const totalCount = stats?.totalRegistered ?? list.length;
+  const pendingCount = stats?.pendingReview ?? list.filter((r) => r.shareConfirmed && r.rewardStatus === 'pending_review').length;
+  const approvedCount = stats?.approvedEntries ?? list.filter((r) => r.rewardStatus === 'approved').length;
+  const creditedCount = stats?.airtimeCredited ?? list.filter((r) => r.rewardStatus === 'credited').length;
+  const declinedCount = stats?.rejectedEntries ?? list.filter((r) => r.rewardStatus === 'declined').length;
   const totalPaidAmount = creditedCount * 200;
   const remainingSlots = Math.max(0, 50 - creditedCount);
 
@@ -305,6 +348,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           /* Main Admin Dashboard */
           <div className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-4 sm:space-y-5">
             
+            {/* Backend connection error banner */}
+            {fetchError && (
+              <div className="p-3.5 sm:p-4 rounded-xl bg-red-950/80 border border-red-500/80 text-red-200 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg animate-fade-in">
+                <div className="flex items-start sm:items-center gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5 sm:mt-0" />
+                  <div>
+                    <strong className="text-white block sm:inline">API Connection Notice: </strong>
+                    <span>{fetchError}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => token && loadData(token)}
+                  className="tap-bounce px-3 py-1.5 rounded-lg bg-red-800 hover:bg-red-700 text-white font-bold text-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Retry Connection</span>
+                </button>
+              </div>
+            )}
+
             {/* Top Metric Cards (5 Comprehensive Campaign Totals) */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-3.5">
               
@@ -521,7 +585,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             color: networkObj?.textColor === '#FFFFFF' ? '#ffffff' : '#ffd000',
                           }}
                         >
-                          {networkObj?.name || reg.network.toUpperCase()}
+                          {networkObj?.name || safeNetworkUpper(reg.network)}
                         </span>
                       </div>
 
@@ -540,7 +604,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <div>
                           <span className="text-slate-400 block text-[10px]">Registered:</span>
                           <span className="text-slate-300">
-                            {new Date(reg.registeredAt).toLocaleDateString()}
+                            {safeFormatDate(reg.registeredAt)}
                           </span>
                         </div>
 
@@ -708,7 +772,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               )}
                               <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
                                 <Calendar className="w-2.5 h-2.5" />
-                                <span>{new Date(reg.registeredAt).toLocaleDateString()}</span>
+                                <span>{safeFormatDate(reg.registeredAt)}</span>
                               </div>
                             </td>
 
@@ -726,7 +790,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                   className="w-2 h-2 rounded-full" 
                                   style={{ backgroundColor: networkObj?.color || '#0284c7' }} 
                                 />
-                                <span>{networkObj?.name || reg.network.toUpperCase()}</span>
+                                <span>{networkObj?.name || safeNetworkUpper(reg.network)}</span>
                               </span>
                             </td>
 
@@ -766,12 +830,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     <div className="text-[10px] text-slate-400 flex items-center gap-1">
                                       <Clock className="w-2.5 h-2.5" />
                                       <span>
-                                        {new Date(reg.shareConfirmedAt).toLocaleString([], {
-                                          month: 'short',
-                                          day: 'numeric',
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                        })}
+                                        {safeFormatDateTime(reg.shareConfirmedAt)}
                                       </span>
                                     </div>
                                   )}

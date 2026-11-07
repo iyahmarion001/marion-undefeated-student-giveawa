@@ -29,17 +29,29 @@ export function clearStoredRegistration(): void {
 
 export function getStoredAdminToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem(ADMIN_TOKEN_KEY);
+  try {
+    return localStorage.getItem(ADMIN_TOKEN_KEY);
+  } catch {
+    return null;
+  }
 }
 
 export function saveAdminToken(token: string): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(ADMIN_TOKEN_KEY, token);
+  try {
+    localStorage.setItem(ADMIN_TOKEN_KEY, token);
+  } catch (e) {
+    console.warn('Failed to save admin token to local storage:', e);
+  }
 }
 
 export function clearAdminToken(): void {
   if (typeof window === 'undefined') return;
-  localStorage.removeItem(ADMIN_TOKEN_KEY);
+  try {
+    localStorage.removeItem(ADMIN_TOKEN_KEY);
+  } catch (e) {
+    console.warn('Failed to clear admin token from local storage:', e);
+  }
 }
 
 /**

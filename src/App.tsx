@@ -15,6 +15,7 @@ import { ParticipationModal } from './components/ParticipationModal';
 import { PosterModal } from './components/PosterModal';
 import { MobileBottomAction } from './components/MobileBottomAction';
 import { AdminDashboard } from './components/AdminDashboard';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Check, Info } from 'lucide-react';
 import { 
   getOrCreateReferralCode, 
@@ -26,7 +27,20 @@ import {
 export default function App() {
   const [isParticipateOpen, setIsParticipateOpen] = useState(false);
   const [isPosterModalOpen, setIsPosterModalOpen] = useState(false);
-  const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isAdminOpen, setIsAdminOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const path = window.location.pathname.toLowerCase();
+    const hash = window.location.hash.toLowerCase();
+    const search = window.location.search.toLowerCase();
+    return (
+      path === '/admin' ||
+      path.startsWith('/admin') ||
+      hash === '#admin' ||
+      hash === '#/admin' ||
+      search.includes('admin=true') ||
+      search.includes('admin=1')
+    );
+  });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   React.useEffect(() => {
@@ -69,9 +83,13 @@ export default function App() {
 
   const handleCloseAdmin = () => {
     setIsAdminOpen(false);
-    if (typeof window !== 'undefined' && window.location.hash.includes('admin')) {
+    if (typeof window !== 'undefined') {
       try {
-        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        if (window.location.pathname.startsWith('/admin')) {
+          window.history.pushState(null, '', '/');
+        } else if (window.location.hash.includes('admin')) {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
       } catch {}
     }
   };
@@ -155,11 +173,13 @@ export default function App() {
       />
 
       {/* Administrator Review & Airtime Disbursement Dashboard */}
-      <AdminDashboard
-        isOpen={isAdminOpen}
-        onClose={handleCloseAdmin}
-        onShowToast={showToast}
-      />
+      <ErrorBoundary fallbackTitle="Private Admin Dashboard Error">
+        <AdminDashboard
+          isOpen={isAdminOpen}
+          onClose={handleCloseAdmin}
+          onShowToast={showToast}
+        />
+      </ErrorBoundary>
 
       {/* Toast Notification */}
       {toastMessage && (

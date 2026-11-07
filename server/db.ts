@@ -55,6 +55,7 @@ if (databaseUrl) {
       ssl: databaseUrl.includes('localhost') ? false : { rejectUnauthorized: false },
       max: 10,
       idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
     });
     console.log('Managed PostgreSQL Pool configured for persistent registrations.');
   } catch (err) {
