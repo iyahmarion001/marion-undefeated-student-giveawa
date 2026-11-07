@@ -7,7 +7,7 @@ import { GIVEAWAY_INFO } from '../types/giveaway';
 
 // The actual publicly accessible deployed application URL on Cloud Run
 export const DEPLOYED_APP_URL = 'https://ais-dev-nnhflti22ouag6junyuqix-911064966292.europe-west2.run.app';
-export const ADMIN_NOTIFICATION_NUMBER = GIVEAWAY_INFO.adminWhatsAppNumber || '2348156310125';
+export const ADMIN_NOTIFICATION_NUMBER = GIVEAWAY_INFO.adminWhatsAppNumber || '2348057231961';
 
 const OWN_REFERRAL_STORAGE_KEY = 'marion_undefeated_student_ref_code';
 const REFERRED_BY_STORAGE_KEY = 'marion_undefeated_student_referred_by';
@@ -154,7 +154,7 @@ export function openWhatsAppShare(messageText: string): boolean {
 
 /**
  * Builds the prefilled WhatsApp notification message addressed directly
- * to the administrator at 2348156310125.
+ * to the administrator at 2348057231961 (08057231961).
  */
 export function buildAdminWhatsAppMessage(registration: {
   id: string;
@@ -195,7 +195,7 @@ export function buildAdminWhatsAppMessage(registration: {
 }
 
 /**
- * Returns the WhatsApp URL addressed directly to the administrator (2348156310125).
+ * Returns the WhatsApp URL addressed directly to the administrator (2348057231961).
  */
 export function getAdminWhatsAppUrl(messageText: string, adminNumber = ADMIN_NOTIFICATION_NUMBER): string {
   const cleanNumber = adminNumber.replace(/\D/g, '');

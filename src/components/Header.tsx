@@ -1,12 +1,13 @@
 import React from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, ShieldCheck } from 'lucide-react';
 import { GIVEAWAY_INFO } from '../types/giveaway';
 
 interface HeaderProps {
   onOpenParticipate: () => void;
+  onOpenAdmin?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onOpenParticipate }) => {
+export const Header: React.FC<HeaderProps> = ({ onOpenParticipate, onOpenAdmin }) => {
   return (
     <header className="sticky top-0 z-40 w-full bg-[#030c1d]/90 backdrop-blur-md border-b border-blue-900/40">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4 md:gap-8">
@@ -39,10 +40,33 @@ export const Header: React.FC<HeaderProps> = ({ onOpenParticipate }) => {
           <a href="#guidelines" className="hover:text-yellow-400 transition-colors whitespace-nowrap shrink-0">
             Guidelines
           </a>
+          {onOpenAdmin && (
+            <button
+              onClick={onOpenAdmin}
+              type="button"
+              className="text-xs text-blue-300 hover:text-yellow-400 transition-colors flex items-center gap-1 cursor-pointer py-1 px-2 rounded-md hover:bg-blue-900/30"
+              title="Open Administrator Portal"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-yellow-400" />
+              <span>Admin Portal</span>
+            </button>
+          )}
         </nav>
 
-        {/* Zone 3: Primary Action CTA */}
+        {/* Zone 3: Primary Action CTA & Quick Admin Access */}
         <div className="flex items-center gap-2 shrink-0">
+          {onOpenAdmin && (
+            <button
+              onClick={onOpenAdmin}
+              type="button"
+              className="tap-bounce md:hidden p-2 rounded-lg bg-blue-950/80 hover:bg-blue-900 border border-blue-700/50 text-yellow-400 text-xs font-bold flex items-center justify-center cursor-pointer"
+              title="Administrator Login"
+              aria-label="Admin Portal"
+            >
+              <ShieldCheck className="w-4 h-4" />
+            </button>
+          )}
+
           <button
             onClick={onOpenParticipate}
             type="button"

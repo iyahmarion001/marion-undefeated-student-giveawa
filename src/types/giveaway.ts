@@ -55,7 +55,7 @@ export const GIVEAWAY_INFO = {
   sessionYear: '2026',
   posterPath: '/assets/aistudio/IMG-20261103-WA0034_a3d08139.jpg',
   whatsappCommunityUrl: 'https://chat.whatsapp.com/marion-undefeated-students',
-  adminWhatsAppNumber: '2348156310125',
+  adminWhatsAppNumber: '2348057231961',
   deployedAppUrl: 'https://ais-dev-nnhflti22ouag6junyuqix-911064966292.europe-west2.run.app'
 };
 

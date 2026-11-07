@@ -31,11 +31,50 @@ export default function App() {
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
-      if (window.location.pathname === '/admin' || window.location.hash === '#admin') {
-        setIsAdminOpen(true);
-      }
+      const checkAdminRoute = () => {
+        const path = window.location.pathname.toLowerCase();
+        const hash = window.location.hash.toLowerCase();
+        const search = window.location.search.toLowerCase();
+
+        if (
+          path === '/admin' ||
+          path.startsWith('/admin') ||
+          hash === '#admin' ||
+          hash === '#/admin' ||
+          search.includes('admin=true') ||
+          search.includes('admin=1')
+        ) {
+          setIsAdminOpen(true);
+        }
+      };
+
+      checkAdminRoute();
+      window.addEventListener('hashchange', checkAdminRoute);
+      window.addEventListener('popstate', checkAdminRoute);
+      return () => {
+        window.removeEventListener('hashchange', checkAdminRoute);
+        window.removeEventListener('popstate', checkAdminRoute);
+      };
     }
   }, []);
+
+  const handleOpenAdmin = () => {
+    setIsAdminOpen(true);
+    if (typeof window !== 'undefined' && !window.location.hash.includes('admin')) {
+      try {
+        window.history.pushState(null, '', '#admin');
+      } catch {}
+    }
+  };
+
+  const handleCloseAdmin = () => {
+    setIsAdminOpen(false);
+    if (typeof window !== 'undefined' && window.location.hash.includes('admin')) {
+      try {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      } catch {}
+    }
+  };
 
   const showToast = (message: string) => {
     setToastMessage(message);
@@ -64,7 +103,10 @@ export default function App() {
     <div id="top" className="min-h-screen bg-[#030c1d] text-slate-100 flex flex-col selection:bg-yellow-400 selection:text-slate-950 pb-16 md:pb-0">
       
       {/* Top Header */}
-      <Header onOpenParticipate={() => setIsParticipateOpen(true)} />
+      <Header 
+        onOpenParticipate={() => setIsParticipateOpen(true)} 
+        onOpenAdmin={handleOpenAdmin}
+      />
 
       {/* Main Content Sections */}
       <main className="flex-1">
@@ -91,7 +133,7 @@ export default function App() {
       </main>
 
       {/* Footer with Administrator link */}
-      <Footer onOpenAdmin={() => setIsAdminOpen(true)} />
+      <Footer onOpenAdmin={handleOpenAdmin} />
 
       {/* Mobile Sticky Thumb Action Bar with WhatsApp Share & Participate */}
       <MobileBottomAction
@@ -115,7 +157,7 @@ export default function App() {
       {/* Administrator Review & Airtime Disbursement Dashboard */}
       <AdminDashboard
         isOpen={isAdminOpen}
-        onClose={() => setIsAdminOpen(false)}
+        onClose={handleCloseAdmin}
         onShowToast={showToast}
       />
 

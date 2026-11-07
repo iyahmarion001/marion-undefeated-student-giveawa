@@ -264,7 +264,7 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
     }
   };
 
-  // Notify Admin via WhatsApp (Number: 2348156310125)
+  // Notify Admin via WhatsApp (Number: 2348057231961)
   const handleNotifyAdminWhatsApp = () => {
     if (!currentRegistration) return;
 
@@ -305,7 +305,7 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
     if (navigator?.clipboard) {
       navigator.clipboard.writeText(msg).then(() => {
         setCopiedAdminProof(true);
-        onShowToast('Proof message copied! Send it to 2348156310125 in WhatsApp.');
+        onShowToast(`Proof message copied! Send it to ${ADMIN_NOTIFICATION_NUMBER} in WhatsApp.`);
         setTimeout(() => setCopiedAdminProof(false), 2500);
       });
     }
@@ -1000,7 +1000,7 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
                     </div>
                   )}
 
-                  {/* Section C: Notify Administrator via WhatsApp (2348156310125) */}
+                  {/* Section C: Notify Administrator via WhatsApp (2348057231961) */}
                   <div className="mt-3 p-3.5 rounded-xl bg-[#051126] border border-emerald-500/60 space-y-2.5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-white flex items-center gap-1.5">

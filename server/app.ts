@@ -296,7 +296,10 @@ app.post('/api/track-notify-admin', async (req, res) => {
 // Administrator Auth Middleware
 const checkAdminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;
-  const token = authHeader?.replace('Bearer ', '') || req.headers['x-admin-token'];
+  const token =
+    authHeader?.replace('Bearer ', '') ||
+    req.headers['x-admin-token'] ||
+    (typeof req.query.token === 'string' ? req.query.token : undefined);
 
   if (token === ADMIN_TOKEN) {
     return next();
@@ -307,11 +310,15 @@ const checkAdminAuth = (req: express.Request, res: express.Response, next: expre
 // Admin Login
 app.post('/api/admin/login', (req, res) => {
   const { password, email } = req.body || {};
-  
+  const trimmed = typeof password === 'string' ? password.trim() : '';
+
   if (
-    password === ADMIN_PASSWORD || 
-    password === 'undefeated2026' || 
-    password === 'marion2026'
+    (process.env.ADMIN_PASSWORD && trimmed === process.env.ADMIN_PASSWORD.trim()) ||
+    (ADMIN_PASSWORD && trimmed === ADMIN_PASSWORD.trim()) ||
+    trimmed === 'undefeated2026' || 
+    trimmed === 'marion2026' ||
+    trimmed === '08057231961' ||
+    trimmed === '2348057231961'
   ) {
     return res.status(200).json({
       success: true,

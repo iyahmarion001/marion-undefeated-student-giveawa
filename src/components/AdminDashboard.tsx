@@ -14,6 +14,7 @@ import {
   clearAdminToken 
 } from '../utils/api';
 import { GiveawayStats, SUPPORTED_NETWORKS, GIVEAWAY_INFO } from '../types/giveaway';
+import { ADMIN_NOTIFICATION_NUMBER } from '../utils/referral';
 
 interface AdminDashboardProps {
   isOpen: boolean;
@@ -132,7 +133,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleExportCsv = () => {
     if (!token) return;
-    window.open('/api/admin/export-csv', '_blank');
+    window.open(`/api/admin/export-csv?token=${encodeURIComponent(token)}`, '_blank');
     onShowToast('Downloading airtime disbursement list CSV...');
   };
 
@@ -207,7 +208,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div className="flex flex-wrap items-center gap-x-3 text-[11px] text-blue-300">
                 <span>Admin: <strong className="text-white font-mono">iyahmarion24@gmail.com</strong></span>
                 <span className="hidden sm:inline">·</span>
-                <span>WhatsApp Notification: <strong className="text-emerald-400 font-mono">2348156310125</strong></span>
+                <span>WhatsApp Notification: <strong className="text-emerald-400 font-mono">{ADMIN_NOTIFICATION_NUMBER}</strong> (08057231961)</span>
               </div>
             </div>
           </div>
