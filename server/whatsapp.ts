@@ -53,7 +53,7 @@ export async function sendDirectWhatsAppNotification(
     `🔑 *Referral Code:* ${params.referralCode}\n` +
     `📢 *Sharing Proof:* ${shareProofText}\n` +
     `📊 *Current Status:* ${params.status}\n\n` +
-    `👉 *Review & Disburse:* https://ais-dev-nnhflti22ouag6junyuqix-911064966292.europe-west2.run.app/admin\n` +
+    `👉 *Review & Disburse:* ${process.env.APP_URL ? `${process.env.APP_URL}/admin` : 'Open Admin Portal to Review'}\n` +
     `#Let's make every penny count.`;
 
   // 1. Check Meta WhatsApp Business Cloud API Credentials

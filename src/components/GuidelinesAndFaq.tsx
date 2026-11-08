@@ -134,12 +134,12 @@ export const GuidelinesAndFaq: React.FC = () => {
           </div>
         </div>
 
-        {/* Secondary WhatsApp Community Link (Requirement 8) */}
-        <div className="mt-4 sm:mt-6 p-3 rounded-xl bg-[#051126]/80 border border-blue-800/40 flex items-center justify-between gap-3">
+        {/* Secondary WhatsApp Community Link */}
+        <div className="mt-4 sm:mt-6 p-3 rounded-xl bg-[#051126]/80 border border-emerald-800/40 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 truncate">
             <Users className="w-4 h-4 text-emerald-400 shrink-0" />
             <span className="text-xs text-blue-200 truncate">
-              Want session updates? <strong className="text-white font-medium">WhatsApp Community</strong>
+              Want session updates? <strong className="text-white font-medium">Join Desco Chat for More Giveaways</strong>
             </span>
           </div>
 
@@ -149,7 +149,7 @@ export const GuidelinesAndFaq: React.FC = () => {
             rel="noopener noreferrer"
             className="tap-bounce px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:text-white bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-600/40 rounded-lg flex items-center gap-1 shrink-0 transition-colors"
           >
-            <span>Join (Optional)</span>
+            <span>Join Chat (Optional)</span>
             <ExternalLink className="w-3 h-3" />
           </a>
         </div>

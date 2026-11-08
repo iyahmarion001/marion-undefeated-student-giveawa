@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Gift, Zap, ShieldCheck, ArrowRight, Copy, Check, MessageCircle, 
-  ExternalLink, UserCheck 
+  ExternalLink, UserCheck, Users 
 } from 'lucide-react';
 import { SUPPORTED_NETWORKS, GiveawayStats } from '../types/giveaway';
 import { 
@@ -361,6 +361,37 @@ export const AirtimeAnnouncement: React.FC<AirtimeAnnouncementProps> = ({
                 <span className="text-blue-300">Strict 50-slot budget (₦10,000 max)</span>
               </div>
             </div>
+
+            {/* Prominent Desco Chat WhatsApp Invitation (Requirement 4 & 5) */}
+            <div className="mt-4 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-[#03152c] to-[#042042] border border-emerald-500/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#25D366]/20 border border-[#25D366]/40 text-[#25D366] flex items-center justify-center shrink-0">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-xs sm:text-sm font-extrabold text-white flex items-center gap-2">
+                    <span>Join Desco Chat for More Giveaways</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      Optional
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-blue-200 mt-0.5">
+                    Stay connected with Delta State Poly Otefe-Oghara students for upcoming drops.
+                  </p>
+                </div>
+              </div>
+
+              <a
+                href="https://chat.whatsapp.com/FFF0LzGU0lwK87cMv9KUDB?s=cl&p=a&iam=2"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="tap-bounce w-full sm:w-auto px-4 py-2 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shrink-0 shadow-md shadow-[#25D366]/20 transition-all cursor-pointer"
+              >
+                <span>Join Desco Chat</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+
           </div>
         </div>
 

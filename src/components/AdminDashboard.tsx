@@ -127,7 +127,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     onShowToast('Logged out of admin dashboard.');
   };
 
-  const handleCopyPhone = (phone: string) => {
+  const handleCopyPhone = (phone?: string) => {
+    if (!phone) return;
     if (navigator?.clipboard) {
       navigator.clipboard.writeText(phone).then(() => {
         setCopiedPhone(phone);
@@ -137,7 +138,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleCopyId = (id: string) => {
+  const handleCopyId = (id?: string) => {
+    if (!id) return;
     if (navigator?.clipboard) {
       navigator.clipboard.writeText(id).then(() => {
         setCopiedId(id);
@@ -147,24 +149,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  const handleStatusChange = async (id: string, newStatus: string, defaultNote?: string) => {
-    if (!token) return;
+  const handleStatusChange = async (id?: string, newStatus?: string, defaultNote?: string) => {
+    if (!id || !newStatus || !token) return;
     const res = await updateRewardStatus(token, id, newStatus, defaultNote);
     if (res.success) {
       const label = 
         newStatus === 'approved' ? 'Approved' :
         newStatus === 'credited' ? 'Marked as Paid (₦200)' :
         newStatus === 'declined' ? 'Rejected' : 'Set to Pending Review';
-      onShowToast(`Student #${id.slice(-6)}: ${label}`);
+      onShowToast(`Student #${String(id).slice(-6)}: ${label}`);
       loadData(token);
     } else {
       onShowToast(res.error || 'Failed to update status.');
     }
   };
 
-  const handleSaveNote = async (id: string) => {
-    if (!token) return;
-    const current = registrations.find((r) => r.id === id);
+  const handleSaveNote = async (id?: string) => {
+    if (!id || !token) return;
+    const current = list.find((r) => r.id === id);
     const res = await updateRewardStatus(token, id, current?.rewardStatus || 'pending_review', noteText);
     if (res.success) {
       onShowToast('Admin note saved.');
@@ -430,7 +432,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </span>
               <div className="flex flex-wrap items-center gap-2">
                 {SUPPORTED_NETWORKS.map((net) => {
-                  const count = registrations.filter((r) => r.network === net.id).length;
+                  const count = list.filter((r) => (r?.network || '').toLowerCase() === net.id.toLowerCase()).length;
                   return (
                     <div
                       key={net.id}
@@ -527,7 +529,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               ) : (
                 filtered.map((reg) => {
-                  const networkObj = SUPPORTED_NETWORKS.find((n) => n.id === reg.network);
+                  const networkObj = SUPPORTED_NETWORKS.find((n) => n.id === (reg?.network || '').toLowerCase());
                   const isPaid = reg.rewardStatus === 'credited';
                   const isApproved = reg.rewardStatus === 'approved';
                   const isDeclined = reg.rewardStatus === 'declined';
@@ -704,7 +706,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </thead>
                     <tbody className="divide-y divide-blue-900/40">
                       {filtered.map((reg) => {
-                        const networkObj = SUPPORTED_NETWORKS.find((n) => n.id === reg.network);
+                        const networkObj = SUPPORTED_NETWORKS.find((n) => n.id === (reg?.network || '').toLowerCase());
                         const isCredited = reg.rewardStatus === 'credited';
                         const isApproved = reg.rewardStatus === 'approved';
                         const isDeclined = reg.rewardStatus === 'declined';
