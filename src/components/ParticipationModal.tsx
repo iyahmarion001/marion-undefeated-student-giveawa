@@ -31,7 +31,8 @@ import {
   trackReferralVisit,
   trackShareClick,
   trackNotifyAdminClick,
-  notifyAdminDirectly
+  notifyAdminDirectly,
+  toSafeString
 } from '../utils/api';
 
 interface ParticipationModalProps {
@@ -194,7 +195,7 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
         onShowToast('Phone & network registered! Now share on WhatsApp to qualify.');
       }
     } else {
-      setRegError(res.error || 'Failed to submit registration. Please check your phone number.');
+      setRegError(toSafeString(res.error, 'Failed to submit registration. Please check your phone number.'));
     }
   };
 
@@ -242,7 +243,7 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
       setCurrentStep('awaiting_review');
       onShowToast('Share confirmation recorded! Status: Share Confirmed – Awaiting Review.');
     } else {
-      onShowToast(res.error || 'Could not record share confirmation.');
+      onShowToast(toSafeString(res.error, 'Could not record share confirmation.'));
     }
   };
 
@@ -380,7 +381,7 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
       }
       onShowToast('Participation record loaded!');
     } else {
-      setLookupError(res.error || 'No matching registration found. Please check your phone number or referral code.');
+      setLookupError(toSafeString(res.error, 'No matching registration found. Please check your phone number or referral code.'));
     }
   };
 
@@ -510,7 +511,7 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
                   {lookupError && (
                     <div className="p-2.5 rounded-lg bg-red-950/80 border border-red-600 text-red-200 text-xs flex items-center gap-2">
                       <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-                      <span>{lookupError}</span>
+                      <span>{toSafeString(lookupError)}</span>
                     </div>
                   )}
                 </form>
@@ -684,7 +685,7 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
                   {regError && (
                     <div className="p-2.5 rounded-lg bg-red-950/80 border border-red-600 text-red-200 text-xs flex items-center gap-2">
                       <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-                      <span>{regError}</span>
+                      <span>{toSafeString(regError)}</span>
                     </div>
                   )}
 

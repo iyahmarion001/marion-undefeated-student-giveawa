@@ -1,6 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertCircle, RefreshCw, Home, ShieldAlert, Trash2 } from 'lucide-react';
-import { clearAdminToken } from '../utils/api';
+import { clearAdminToken, toSafeString } from '../utils/api';
 
 interface Props {
   children: ReactNode;
@@ -76,11 +76,13 @@ export class ErrorBoundary extends Component<Props, State> {
               <div className="mb-6 p-3 rounded-xl bg-slate-950/80 border border-red-900/60 text-left font-mono text-[11px] text-red-300 overflow-x-auto max-h-32">
                 <div className="font-bold text-red-400 mb-1 flex items-center gap-1.5">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span>{this.state.error.name}: {this.state.error.message}</span>
+                  <span>
+                    {(this.state.error as any)?.name || ((this.state.error as any)?.code ? `Code: ${(this.state.error as any).code}` : 'Error')}: {toSafeString((this.state.error as any)?.message || this.state.error, 'An unexpected error occurred')}
+                  </span>
                 </div>
                 {this.state.errorInfo?.componentStack && (
                   <pre className="text-[10px] text-slate-500 whitespace-pre-wrap">
-                    {this.state.errorInfo.componentStack.slice(0, 300)}...
+                    {toSafeString(this.state.errorInfo.componentStack).slice(0, 300)}...
                   </pre>
                 )}
               </div>

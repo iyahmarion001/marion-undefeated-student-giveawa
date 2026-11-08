@@ -176,30 +176,46 @@ export function writeDb(data: DatabaseSchema): void {
   }
 }
 
+function cleanStringValue(val: any): string | null {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object') {
+    if (typeof val.message === 'string') {
+      return val.code ? `[${val.code}] ${val.message}` : val.message;
+    }
+    try {
+      return JSON.stringify(val);
+    } catch {
+      return String(val);
+    }
+  }
+  return String(val);
+}
+
 // Convert PostgreSQL row to Registration interface
 function mapPgRowToRegistration(row: any): Registration {
   return {
-    id: row.id,
-    phoneNumber: row.phone_number,
-    network: row.network,
-    fullName: row.full_name || undefined,
-    department: row.department || undefined,
-    referralCode: row.referral_code,
-    referredBy: row.referred_by || null,
-    registeredAt: row.registered_at instanceof Date ? row.registered_at.toISOString() : String(row.registered_at),
+    id: cleanStringValue(row.id) || String(row.id || ''),
+    phoneNumber: cleanStringValue(row.phone_number) || '',
+    network: (cleanStringValue(row.network) as any) || 'mtn',
+    fullName: cleanStringValue(row.full_name) || undefined,
+    department: cleanStringValue(row.department) || undefined,
+    referralCode: cleanStringValue(row.referral_code) || '',
+    referredBy: cleanStringValue(row.referred_by),
+    registeredAt: row.registered_at instanceof Date ? row.registered_at.toISOString() : (cleanStringValue(row.registered_at) || new Date().toISOString()),
     shareConfirmed: Boolean(row.share_confirmed),
-    shareMethod: row.share_method || null,
-    shareConfirmedAt: row.share_confirmed_at ? (row.share_confirmed_at instanceof Date ? row.share_confirmed_at.toISOString() : String(row.share_confirmed_at)) : null,
+    shareMethod: (cleanStringValue(row.share_method) as any) || null,
+    shareConfirmedAt: row.share_confirmed_at ? (row.share_confirmed_at instanceof Date ? row.share_confirmed_at.toISOString() : cleanStringValue(row.share_confirmed_at)) : null,
     shareClicks: Number(row.share_clicks || 0),
     notifyAdminClicks: Number(row.notify_admin_clicks || 0),
-    status: row.status,
-    rewardStatus: row.reward_status,
+    status: (cleanStringValue(row.status) as any) || 'Registered – Share Pending',
+    rewardStatus: (cleanStringValue(row.reward_status) as any) || 'pending_review',
     airtimeAmount: Number(row.airtime_amount || 200),
-    adminNote: row.admin_note || null,
+    adminNote: cleanStringValue(row.admin_note),
     adminNotified: Boolean(row.admin_notified),
-    adminNotifiedAt: row.admin_notified_at ? (row.admin_notified_at instanceof Date ? row.admin_notified_at.toISOString() : String(row.admin_notified_at)) : null,
-    notifyError: row.notify_error || null,
-    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
+    adminNotifiedAt: row.admin_notified_at ? (row.admin_notified_at instanceof Date ? row.admin_notified_at.toISOString() : cleanStringValue(row.admin_notified_at)) : null,
+    notifyError: cleanStringValue(row.notify_error),
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : (cleanStringValue(row.updated_at) || new Date().toISOString()),
   };
 }
 

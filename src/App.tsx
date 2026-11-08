@@ -23,6 +23,7 @@ import {
   buildWhatsAppShareText, 
   openWhatsAppShare 
 } from './utils/referral';
+import { toSafeString } from './utils/api';
 
 export default function App() {
   const [isParticipateOpen, setIsParticipateOpen] = useState(false);
@@ -94,8 +95,10 @@ export default function App() {
     }
   };
 
-  const showToast = (message: string) => {
-    setToastMessage(message);
+  const showToast = (message: any) => {
+    const text = toSafeString(message);
+    if (!text) return;
+    setToastMessage(text);
     setTimeout(() => {
       setToastMessage(null);
     }, 3500);
@@ -189,7 +192,7 @@ export default function App() {
           className="fixed bottom-20 md:bottom-6 right-4 left-4 sm:left-auto sm:max-w-md z-50 px-4 py-3 rounded-xl bg-slate-900/95 border border-yellow-400/80 text-white text-xs sm:text-sm font-semibold shadow-2xl flex items-center gap-2.5 backdrop-blur-md animate-fade-in"
         >
           <Check className="w-4 h-4 text-yellow-400 shrink-0" />
-          <span className="leading-snug">{toastMessage}</span>
+          <span className="leading-snug">{toSafeString(toastMessage)}</span>
         </div>
       )}
 

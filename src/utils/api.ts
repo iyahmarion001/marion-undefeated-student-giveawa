@@ -55,6 +55,43 @@ export function clearAdminToken(): void {
 }
 
 /**
+ * Safely extracts human-readable text from any value,
+ * especially error objects with { code, message } or { error: { code, message } }
+ */
+export function toSafeString(val: unknown, fallback = ''): string {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'string') return val;
+  if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+  if (typeof val === 'object') {
+    const obj = val as Record<string, any>;
+    if (typeof obj.message === 'string') {
+      return obj.code ? `[${obj.code}] ${obj.message}` : obj.message;
+    }
+    if (typeof obj.error === 'string') {
+      return obj.error;
+    }
+    if (typeof obj.error === 'object' && obj.error !== null) {
+      return toSafeString(obj.error, fallback);
+    }
+    if (typeof obj.message === 'object' && obj.message !== null) {
+      return toSafeString(obj.message, fallback);
+    }
+    if (typeof obj.statusText === 'string') {
+      return obj.statusText;
+    }
+    if (obj.code !== undefined) {
+      return `Error code: ${obj.code}`;
+    }
+    try {
+      return JSON.stringify(val);
+    } catch {
+      return fallback;
+    }
+  }
+  return String(val);
+}
+
+/**
  * Universal safe JSON fetch helper.
  * Reads response as text first, then parses safely.
  * Guarantees that non-JSON responses (HTML 404, plain text, etc.)
@@ -88,7 +125,8 @@ async function safeFetchJson<T>(
 
     // If server returned non-2xx status code
     if (!res.ok) {
-      let errorMessage = parsed?.error || parsed?.message;
+      let rawError = parsed?.error ?? parsed?.message ?? parsed;
+      let errorMessage = toSafeString(rawError);
 
       if (!errorMessage) {
         if (rawText && rawText.length < 150 && !rawText.includes('<html') && !rawText.includes('<!DOCTYPE')) {
@@ -124,7 +162,7 @@ async function safeFetchJson<T>(
     return {
       ok: false,
       status: 0,
-      error: networkError?.message || 'Network connection failed. Please check your internet connection.',
+      error: toSafeString(networkError?.message || networkError, 'Network connection failed. Please check your internet connection.'),
     };
   }
 }
@@ -332,7 +370,7 @@ export async function adminLogin(password: string, email?: string): Promise<{
   const result = await safeFetchJson<{
     success?: boolean;
     token?: string;
-    error?: string;
+    error?: any;
   }>('/api/admin/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -344,9 +382,10 @@ export async function adminLogin(password: string, email?: string): Promise<{
     return { success: true, token: result.data.token };
   }
 
+  const err = result.data?.error || result.error;
   return {
     success: false,
-    error: result.error || 'Invalid administrator password.',
+    error: toSafeString(err, 'Invalid administrator password.'),
   };
 }
 
@@ -359,22 +398,24 @@ export async function fetchAdminRegistrations(token: string): Promise<{
   const result = await safeFetchJson<{
     registrations?: any[];
     stats?: GiveawayStats;
-    error?: string;
+    error?: any;
+    success?: boolean;
   }>('/api/admin/registrations', {
     headers: { Authorization: `Bearer ${token}` },
   });
 
-  if (result.ok && result.data) {
+  if (result.ok && result.data && Array.isArray(result.data.registrations)) {
     return {
       success: true,
-      registrations: result.data.registrations || [],
+      registrations: result.data.registrations,
       stats: result.data.stats,
     };
   }
 
+  const err = result.data?.error || result.error;
   return {
     success: false,
-    error: result.error || 'Failed to fetch administrator records.',
+    error: toSafeString(err, 'Failed to fetch administrator records.'),
   };
 }
 
@@ -387,7 +428,7 @@ export async function updateRewardStatus(
   const result = await safeFetchJson<{
     success?: boolean;
     message?: string;
-    error?: string;
+    error?: any;
   }>('/api/admin/update-reward', {
     method: 'POST',
     headers: {
@@ -400,13 +441,14 @@ export async function updateRewardStatus(
   if (result.ok && result.data && result.data.success) {
     return {
       success: true,
-      message: result.data.message || 'Status updated successfully.',
+      message: toSafeString(result.data.message, 'Status updated successfully.'),
     };
   }
 
+  const err = result.data?.error || result.error;
   return {
     success: false,
-    error: result.error || 'Failed to update reward status.',
+    error: toSafeString(err, 'Failed to update reward status.'),
   };
 }
 
@@ -481,7 +523,7 @@ export async function notifyAdminDirectly(payload: {
     success: false,
     sent: false,
     configured: false,
-    error: result.error || 'Failed to dispatch notification to administrator.',
+    error: toSafeString(result.data?.error || result.error, 'Failed to dispatch notification to administrator.'),
   };
 }
 

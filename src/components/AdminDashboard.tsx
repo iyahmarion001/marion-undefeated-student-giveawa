@@ -11,7 +11,8 @@ import {
   updateRewardStatus, 
   getStoredAdminToken, 
   saveAdminToken, 
-  clearAdminToken 
+  clearAdminToken,
+  toSafeString
 } from '../utils/api';
 import { GiveawayStats, SUPPORTED_NETWORKS, GIVEAWAY_INFO } from '../types/giveaway';
 import { ADMIN_NOTIFICATION_NUMBER } from '../utils/referral';
@@ -24,14 +25,14 @@ interface AdminDashboardProps {
 
 const safeNetworkUpper = (net?: string | null) => {
   if (!net) return 'UNKNOWN';
-  return String(net).toUpperCase();
+  return toSafeString(net).toUpperCase();
 };
 
 const safeFormatDate = (dateStr?: string | null) => {
   if (!dateStr) return '—';
   try {
     const d = new Date(dateStr);
-    return isNaN(d.getTime()) ? String(dateStr) : d.toLocaleDateString();
+    return isNaN(d.getTime()) ? toSafeString(dateStr) : d.toLocaleDateString();
   } catch {
     return '—';
   }
@@ -41,7 +42,7 @@ const safeFormatDateTime = (dateStr?: string | null) => {
   if (!dateStr) return '—';
   try {
     const d = new Date(dateStr);
-    return isNaN(d.getTime()) ? String(dateStr) : d.toLocaleString();
+    return isNaN(d.getTime()) ? toSafeString(dateStr) : d.toLocaleString();
   } catch {
     return '—';
   }
@@ -79,17 +80,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         setRegistrations(Array.isArray(result.registrations) ? result.registrations : []);
         if (result.stats) setStats(result.stats);
       } else {
-        if (result.error?.includes('Unauthorized')) {
+        const errMsg = toSafeString(result.error, 'Failed to load records.');
+        if (errMsg.toLowerCase().includes('unauthorized') || errMsg.toLowerCase().includes('jwt')) {
           clearAdminToken();
           setToken(null);
           onShowToast('Session expired. Please log in again.');
         } else {
-          setFetchError(result.error || 'Failed to load records.');
-          onShowToast(result.error || 'Failed to load records.');
+          setFetchError(errMsg);
+          onShowToast(errMsg);
         }
       }
     } catch (err: any) {
-      setFetchError(err?.message || 'Network error while contacting admin endpoint.');
+      const errMsg = toSafeString(err?.message || err, 'Network error while contacting admin endpoint.');
+      setFetchError(errMsg);
     } finally {
       setIsLoading(false);
     }
@@ -116,7 +119,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       onShowToast('Administrator logged in successfully.');
       loadData(res.token);
     } else {
-      setLoginError(res.error || 'Invalid administrator password.');
+      const err = toSafeString(res.error, 'Invalid administrator password.');
+      setLoginError(err);
     }
   };
 
@@ -160,7 +164,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       onShowToast(`Student #${String(id).slice(-6)}: ${label}`);
       loadData(token);
     } else {
-      onShowToast(res.error || 'Failed to update status.');
+      onShowToast(toSafeString(res.error, 'Failed to update status.'));
     }
   };
 
@@ -173,7 +177,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       setEditingNoteId(null);
       loadData(token);
     } else {
-      onShowToast(res.error || 'Failed to save note.');
+      onShowToast(toSafeString(res.error, 'Failed to save note.'));
     }
   };
 
@@ -326,7 +330,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {loginError && (
                 <div className="p-3 rounded-lg bg-red-950/80 border border-red-600/60 text-red-200 text-xs text-left flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-                  <span>{loginError}</span>
+                  <span>{toSafeString(loginError)}</span>
                 </div>
               )}
 
@@ -357,7 +361,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5 sm:mt-0" />
                   <div>
                     <strong className="text-white block sm:inline">API Connection Notice: </strong>
-                    <span>{fetchError}</span>
+                    <span>{toSafeString(fetchError)}</span>
                   </div>
                 </div>
                 <button
@@ -550,7 +554,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <div className="flex items-center gap-1.5 font-mono font-bold text-white text-sm">
-                            <span>{reg.phoneNumber}</span>
+                            <span>{toSafeString(reg.phoneNumber)}</span>
                             <button
                               type="button"
                               onClick={() => handleCopyPhone(reg.phoneNumber)}
@@ -562,7 +566,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                           <div className="flex items-center gap-1 text-[11px] text-blue-300 font-mono mt-0.5">
                             <span className="text-slate-400">ID:</span>
-                            <span className="truncate max-w-[130px]">{reg.id}</span>
+                            <span className="truncate max-w-[130px]">{toSafeString(reg.id)}</span>
                             <button
                               type="button"
                               onClick={() => handleCopyId(reg.id)}
@@ -574,7 +578,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </div>
                           {reg.fullName && (
                             <div className="text-xs text-slate-300 mt-0.5">
-                              {reg.fullName} {reg.department && `(${reg.department})`}
+                              {toSafeString(reg.fullName)} {reg.department && `(${toSafeString(reg.department)})`}
                             </div>
                           )}
                         </div>
@@ -600,7 +604,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                         <div>
                           <span className="text-slate-400 block text-[10px]">Referral Code:</span>
-                          <span className="font-mono text-yellow-400 font-bold">{reg.referralCode}</span>
+                          <span className="font-mono text-yellow-400 font-bold">{toSafeString(reg.referralCode)}</span>
                         </div>
 
                         <div>
@@ -626,7 +630,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                       {reg.adminNote && (
                         <div className="text-[11px] p-2 rounded bg-blue-950/60 text-blue-200 border border-blue-800/40">
-                          <strong>Note:</strong> {reg.adminNote}
+                          <strong>Note:</strong> {toSafeString(reg.adminNote)}
                         </div>
                       )}
 
@@ -727,7 +731,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             {/* Phone & Student Info */}
                             <td className="py-3 px-3.5 align-middle">
                               <div className="font-mono font-bold text-white text-xs sm:text-sm flex items-center gap-1.5">
-                                <span>{reg.phoneNumber}</span>
+                                <span>{toSafeString(reg.phoneNumber)}</span>
                                 <button
                                   type="button"
                                   onClick={() => handleCopyPhone(reg.phoneNumber)}
@@ -751,7 +755,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               </div>
                               <div className="flex items-center gap-1 text-[11px] text-blue-300 font-mono mt-0.5">
                                 <span className="text-slate-400">ID:</span>
-                                <span>{reg.id}</span>
+                                <span>{toSafeString(reg.id)}</span>
                                 <button
                                   type="button"
                                   onClick={() => handleCopyId(reg.id)}
@@ -768,8 +772,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               {reg.fullName && (
                                 <div className="text-[11px] text-slate-300 flex items-center gap-1 mt-0.5">
                                   <User className="w-3 h-3 text-slate-400" />
-                                  <span>{reg.fullName}</span>
-                                  {reg.department && <span className="text-slate-400">· {reg.department}</span>}
+                                  <span>{toSafeString(reg.fullName)}</span>
+                                  {reg.department && <span className="text-slate-400">· {toSafeString(reg.department)}</span>}
                                 </div>
                               )}
                               <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
@@ -803,10 +807,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                             {/* Referral Code & Inviter */}
                             <td className="py-3 px-3 align-middle font-mono text-[11px]">
-                              <div className="text-yellow-400 font-bold">{reg.referralCode}</div>
+                              <div className="text-yellow-400 font-bold">{toSafeString(reg.referralCode)}</div>
                               {reg.referredBy ? (
                                 <div className="text-[10px] text-slate-400">
-                                  Invited by: <span className="text-blue-300">{reg.referredBy}</span>
+                                  Invited by: <span className="text-blue-300">{toSafeString(reg.referredBy)}</span>
                                 </div>
                               ) : (
                                 <div className="text-[10px] text-slate-500">Direct visitor</div>
@@ -897,12 +901,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 <div 
                                   onClick={() => {
                                     setEditingNoteId(reg.id);
-                                    setNoteText(reg.adminNote || '');
+                                    setNoteText(toSafeString(reg.adminNote, ''));
                                   }}
                                   className="text-[11px] text-slate-300 hover:text-white cursor-pointer hover:underline max-w-[140px] truncate"
-                                  title={reg.adminNote || 'Click to add note'}
+                                  title={toSafeString(reg.adminNote, 'Click to add note')}
                                 >
-                                  {reg.adminNote ? `📝 ${reg.adminNote}` : <span className="text-slate-500 italic">+ Note</span>}
+                                  {reg.adminNote ? `📝 ${toSafeString(reg.adminNote)}` : <span className="text-slate-500 italic">+ Note</span>}
                                 </div>
                               )}
                             </td>
