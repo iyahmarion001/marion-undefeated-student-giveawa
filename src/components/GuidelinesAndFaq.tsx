@@ -139,7 +139,7 @@ export const GuidelinesAndFaq: React.FC = () => {
           <div className="flex items-center gap-2 truncate">
             <Users className="w-4 h-4 text-emerald-400 shrink-0" />
             <span className="text-xs text-blue-200 truncate">
-              Want session updates? <strong className="text-white font-medium">Join Desco Chat for More Giveaways</strong>
+              Want session updates? <strong className="text-white font-medium">Join Despo Chat for More Giveaways</strong>
             </span>
           </div>
 

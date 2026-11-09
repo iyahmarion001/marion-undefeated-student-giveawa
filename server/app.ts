@@ -1,4 +1,5 @@
 import express from 'express';
+import 'dotenv/config';
 import {
   getAllRegistrationsAsync,
   saveRegistrationAsync,
@@ -10,20 +11,35 @@ import {
   markRewardAsPaidAtomicAsync,
   normalizeNigerianPhone,
   maskPhone,
+  verifyAdminPasswordAsync,
+  createAdminSessionToken,
+  verifyAdminSessionToken,
+  getDatabaseStatusAsync,
   type Registration
 } from './db';
 import { sendDirectWhatsAppNotification } from './whatsapp';
 
 export const app = express();
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'marion2026';
-const ADMIN_TOKEN = 'mu-admin-auth-session-token-2026';
-
 // Middleware for parsing JSON requests safely
 app.use(express.json());
 
+// Normalize string or pre-parsed request bodies (safely handles Vercel serverless runtime)
+app.use((req, _res, next) => {
+  if (typeof req.body === 'string' && req.body.trim().startsWith('{')) {
+    try {
+      req.body = JSON.parse(req.body);
+    } catch {}
+  }
+  next();
+});
+
 // Normalization middleware for Vercel Serverless & proxy environments
 app.use((req, _res, next) => {
+  if (req.query && typeof req.query.__api_path === 'string') {
+    const rawPath = req.query.__api_path;
+    req.url = rawPath.startsWith('/') ? `/api${rawPath}` : `/api/${rawPath}`;
+  }
   const forwarded = (req.headers['x-forwarded-uri'] || req.headers['x-vercel-matched-path'] || req.headers['x-matched-path']) as string;
   if (forwarded && (req.url.startsWith('/api/index') || req.url === '/api/index')) {
     req.url = forwarded;
@@ -438,41 +454,98 @@ app.post(['/api/notify-admin-direct', '/notify-admin-direct'], async (req, res) 
   }
 });
 
-// Administrator Auth Middleware
+// Administrator Auth Middleware - validates dynamic HMAC signed session token
 const checkAdminAuth = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const authHeader = req.headers.authorization;
   const token =
-    authHeader?.replace('Bearer ', '') ||
-    req.headers['x-admin-token'] ||
-    (typeof req.query.token === 'string' ? req.query.token : undefined);
+    authHeader?.replace('Bearer ', '').trim() ||
+    (typeof req.headers['x-admin-token'] === 'string' ? req.headers['x-admin-token'].trim() : undefined) ||
+    (typeof req.query.token === 'string' ? req.query.token.trim() : undefined);
 
-  if (token === ADMIN_TOKEN) {
+  if (token && verifyAdminSessionToken(token)) {
     return next();
   }
-  return res.status(401).json({ error: 'Unauthorized: Administrator access required.' });
+  return res.status(401).json({ error: 'Unauthorized: Valid administrator session required.' });
 };
 
-// Admin Login
-app.post(['/api/admin/login', '/admin/login'], (req, res) => {
-  const { password, email } = req.body || {};
-  const trimmed = typeof password === 'string' ? password.trim() : '';
-
-  if (
-    (process.env.ADMIN_PASSWORD && trimmed === process.env.ADMIN_PASSWORD.trim()) ||
-    (ADMIN_PASSWORD && trimmed === ADMIN_PASSWORD.trim()) ||
-    trimmed === 'undefeated2026' || 
-    trimmed === 'marion2026' ||
-    trimmed === '08057231961' ||
-    trimmed === '2348057231961'
-  ) {
-    return res.status(200).json({
-      success: true,
-      token: ADMIN_TOKEN,
-      adminEmail: email || 'iyahmarion24@gmail.com',
+// Safe diagnostic endpoint to verify database and environment health on Vercel
+app.get(['/api/diagnostic', '/api/admin/diagnostic'], async (_req, res) => {
+  try {
+    const dbStatus = await getDatabaseStatusAsync();
+    res.status(200).json({
+      service: 'Marion Undefeated Airtime Giveaway 2026',
+      environment: process.env.VERCEL ? 'Vercel Serverless' : 'Node.js Server',
+      adminPasswordConfigured: Boolean(process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD.trim()),
+      adminSessionKeyPersistent: Boolean(
+        (process.env.ADMIN_SESSION_SECRET && process.env.ADMIN_SESSION_SECRET.trim()) ||
+        (process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD.trim())
+      ),
+      adminSessionKeySource: process.env.ADMIN_SESSION_SECRET
+        ? 'Dedicated (ADMIN_SESSION_SECRET)'
+        : (process.env.ADMIN_PASSWORD ? 'Derived (ADMIN_PASSWORD)' : 'Not Configured'),
+      adminWhatsAppConfigured: Boolean(process.env.ADMIN_WHATSAPP || process.env.ADMIN_WHATSAPP_NUMBER),
+      adminWhatsAppNumber: '2348057231961',
+      whatsappApiRequired: false,
+      whatsappDeliveryMode: (process.env.WHATSAPP_ACCESS_TOKEN || process.env.TWILIO_ACCOUNT_SID)
+        ? 'Automated Cloud API'
+        : 'Direct WhatsApp Chat Fallback (08057231961)',
+      database: dbStatus,
+      uptimeSeconds: Math.floor(process.uptime()),
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      error: 'Diagnostic check failed: ' + (err?.message || err),
     });
   }
+});
 
-  return res.status(401).json({ error: 'Invalid administrator password.' });
+// Admin Login with secure verification and unpredictable token generation
+app.post(['/api/admin/login', '/admin/login'], async (req, res) => {
+  try {
+    let body = req.body;
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body);
+      } catch {}
+    }
+
+    const { password, email } = body || {};
+    const trimmed = typeof password === 'string' ? password.trim() : '';
+
+    console.log('[Admin Security]: Administrator authentication attempt received.');
+
+    if (!trimmed) {
+      return res.status(400).json({ error: 'Please enter the administrator passcode.' });
+    }
+
+    const verification = await verifyAdminPasswordAsync(trimmed);
+
+    if (verification.valid) {
+      const sessionToken = createAdminSessionToken();
+      if (!sessionToken) {
+        return res.status(500).json({
+          error: 'Failed to generate administrator session token. Ensure ADMIN_PASSWORD is set on the server.',
+        });
+      }
+
+      console.log('[Admin Security]: Administrator successfully authenticated. Session token generated.');
+      return res.status(200).json({
+        success: true,
+        token: sessionToken,
+        adminEmail: email || 'iyahmarion24@gmail.com',
+      });
+    }
+
+    console.warn('[Admin Security Alert]: Administrator authentication failed — invalid credentials.');
+    return res.status(401).json({
+      error: verification.reason || 'Invalid administrator password.',
+    });
+  } catch (err: any) {
+    console.error('[Admin Security Fatal]:', err?.message || err);
+    return res.status(500).json({
+      error: `Login processing error: ${err?.message || 'Internal server error'}`,
+    });
+  }
 });
 
 // Admin Get Registrations
@@ -570,11 +643,11 @@ app.get(['/api/admin/export-csv', '/admin/export-csv'], checkAdminAuth, async (_
   }
 });
 
-// Dedicated 404 handler for any unmatched /api/* route: ALWAYS returns valid JSON!
-app.all('/api/*', (req, res) => {
+// Dedicated 404 handler for any unmatched /api route: ALWAYS returns valid JSON!
+app.all(['/api', '/api/*'], (req, res) => {
   res.status(404).json({
     error: `API route not found: ${req.method} ${req.path}`,
-    validEndpoints: ['/api/stats', '/api/register', '/api/confirm-share', '/api/status/:query', '/api/admin/login']
+    validEndpoints: ['/api/stats', '/api/register', '/api/confirm-share', '/api/status/:query', '/api/admin/login', '/api/diagnostic']
   });
 });
 

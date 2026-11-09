@@ -3,7 +3,8 @@ import {
   ShieldCheck, LogOut, RefreshCw, Download, Search, Filter, 
   CheckCircle, Clock, AlertCircle, Phone, Copy, Check, User, 
   X, ArrowLeft, Send, Sparkles, MessageCircle, FileSpreadsheet, 
-  ThumbsUp, ThumbsDown, DollarSign, ExternalLink, Calendar, Hash
+  ThumbsUp, ThumbsDown, DollarSign, ExternalLink, Calendar, Hash,
+  Database
 } from 'lucide-react';
 import { 
   adminLogin, 
@@ -70,6 +71,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
+
+  const [diagnostic, setDiagnostic] = useState<any | null>(null);
+  const [isCheckingDiag, setIsCheckingDiag] = useState(false);
+  const [showDiag, setShowDiag] = useState(false);
+
+  const handleCheckDiagnostic = async () => {
+    setIsCheckingDiag(true);
+    setShowDiag(true);
+    try {
+      const res = await fetch('/api/diagnostic');
+      const data = await res.json();
+      setDiagnostic(data);
+    } catch (e: any) {
+      setDiagnostic({ error: 'Failed to contact diagnostic endpoint: ' + (e?.message || e) });
+    } finally {
+      setIsCheckingDiag(false);
+    }
+  };
 
   const loadData = async (activeToken: string) => {
     setIsLoading(true);
@@ -323,7 +342,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   className="w-full px-4 py-3 rounded-xl bg-[#030c1d] border border-blue-600/60 text-white text-sm focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 font-mono"
                 />
                 <p className="text-[11px] text-slate-400 text-left mt-1.5">
-                  Default passcode: <code className="text-yellow-400 font-mono">marion2026</code> (Configurable via <code className="text-blue-300 font-mono">ADMIN_PASSWORD</code>)
+                  Requires private <code className="text-blue-300 font-mono">ADMIN_PASSWORD</code> configured in server/Vercel settings.
                 </p>
               </div>
 
@@ -349,6 +368,74 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 )}
               </button>
             </form>
+
+            {/* Safe Diagnostic Panel on Login Screen */}
+            <div className="w-full mt-4 pt-4 border-t border-blue-900/40 text-left">
+              <button
+                type="button"
+                onClick={handleCheckDiagnostic}
+                disabled={isCheckingDiag}
+                className="w-full py-2 px-3 rounded-lg bg-blue-950/60 hover:bg-blue-900/60 text-blue-300 text-xs font-semibold flex items-center justify-between border border-blue-800/40 cursor-pointer transition-colors"
+              >
+                <span className="flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Check Server &amp; Database Health</span>
+                </span>
+                {isCheckingDiag ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                ) : (
+                  <span className="text-[10px] text-slate-400">{showDiag ? 'Refresh' : 'Diagnose'}</span>
+                )}
+              </button>
+
+              {showDiag && diagnostic && (
+                <div className="mt-2.5 p-3 rounded-xl bg-slate-950/80 border border-blue-800/50 text-[11px] space-y-1.5 animate-fade-in font-mono text-slate-300">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Environment:</span>
+                    <span className="text-white font-bold">{toSafeString(diagnostic.environment, 'Vercel / Node')}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Database Engine:</span>
+                    <span className={diagnostic.database?.connectionActive ? 'text-emerald-400 font-bold' : 'text-amber-400'}>
+                      {toSafeString(diagnostic.database?.storageEngine, 'Checking...')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">DB Connection:</span>
+                    <span className={diagnostic.database?.connectionActive ? 'text-emerald-400 font-bold' : 'text-amber-400'}>
+                      {diagnostic.database?.connectionActive ? 'Active' : 'Fallback / Standby'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">ADMIN_PASSWORD:</span>
+                    <span className={diagnostic.adminPasswordConfigured ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                      {diagnostic.adminPasswordConfigured ? 'Configured (Env)' : 'Not Configured (Required)'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Session Signing Key:</span>
+                    <span className={diagnostic.adminSessionKeyPersistent ? 'text-emerald-400 font-bold' : 'text-amber-400'}>
+                      {toSafeString(diagnostic.adminSessionKeySource, 'Persistent (Env)')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Admin WhatsApp:</span>
+                    <span className="text-blue-300 font-bold">2348057231961</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">WhatsApp API:</span>
+                    <span className="text-slate-300">
+                      {diagnostic.whatsappDeliveryMode ? toSafeString(diagnostic.whatsappDeliveryMode) : 'Direct Chat Fallback (Optional API)'}
+                    </span>
+                  </div>
+                  {diagnostic.database?.lastDiagnosticMessage && (
+                    <div className="pt-1 border-t border-slate-800 text-[10px] text-slate-400">
+                      <strong>Status:</strong> {toSafeString(diagnostic.database.lastDiagnosticMessage)}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           /* Main Admin Dashboard */

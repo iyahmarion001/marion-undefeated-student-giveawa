@@ -362,7 +362,7 @@ export const AirtimeAnnouncement: React.FC<AirtimeAnnouncementProps> = ({
               </div>
             </div>
 
-            {/* Prominent Desco Chat WhatsApp Invitation (Requirement 4 & 5) */}
+            {/* Prominent Despo Chat WhatsApp Invitation (Requirement 6 - Lower Homepage Section) */}
             <div className="mt-4 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-[#03152c] to-[#042042] border border-emerald-500/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-[#25D366]/20 border border-[#25D366]/40 text-[#25D366] flex items-center justify-center shrink-0">
@@ -370,7 +370,7 @@ export const AirtimeAnnouncement: React.FC<AirtimeAnnouncementProps> = ({
                 </div>
                 <div>
                   <div className="text-xs sm:text-sm font-extrabold text-white flex items-center gap-2">
-                    <span>Join Desco Chat for More Giveaways</span>
+                    <span>Join Despo Chat for More Giveaways</span>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                       Optional
                     </span>
@@ -387,7 +387,7 @@ export const AirtimeAnnouncement: React.FC<AirtimeAnnouncementProps> = ({
                 rel="noopener noreferrer"
                 className="tap-bounce w-full sm:w-auto px-4 py-2 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 shrink-0 shadow-md shadow-[#25D366]/20 transition-all cursor-pointer"
               >
-                <span>Join Desco Chat</span>
+                <span>Join Despo Chat</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>

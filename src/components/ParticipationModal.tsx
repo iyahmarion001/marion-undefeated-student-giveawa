@@ -1145,7 +1145,7 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Requirement 4: Desco Chat Optional Community Invitation */}
+                  {/* Requirement 6: Despo Chat Optional Community Invitation (Directly below Notify Admin) */}
                   <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#03152c] to-[#042042] border border-emerald-500/50 shadow-md flex items-center justify-between gap-3 animate-fade-in">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-[#25D366]/20 border border-[#25D366]/40 text-[#25D366] flex items-center justify-center shrink-0">
@@ -1153,7 +1153,7 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
                       </div>
                       <div>
                         <div className="text-xs sm:text-sm font-extrabold text-white flex items-center gap-2">
-                          <span>Join Desco Chat for More Giveaways</span>
+                          <span>Join Despo Chat for More Giveaways</span>
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                             Optional
                           </span>
@@ -1168,9 +1168,9 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
                       href="https://chat.whatsapp.com/FFF0LzGU0lwK87cMv9KUDB?s=cl&p=a&iam=2"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="tap-bounce px-3 py-2 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-slate-950 font-black text-xs flex items-center gap-1.5 shrink-0 shadow-md shadow-[#25D366]/20 transition-all cursor-pointer"
+                      className="tap-bounce px-3.5 py-2 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-slate-950 font-black text-xs flex items-center gap-1.5 shrink-0 shadow-md shadow-[#25D366]/20 transition-all cursor-pointer"
                     >
-                      <span>Join Chat</span>
+                      <span>Join Despo Chat</span>
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   </div>

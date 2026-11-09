@@ -1,31 +1,41 @@
 // server.ts
+import "dotenv/config";
 import path2 from "path";
 import { fileURLToPath } from "url";
 import express2 from "express";
 
 // server/app.ts
 import express from "express";
+import "dotenv/config";
 
 // server/db.ts
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import pg from "pg";
+import "dotenv/config";
 var memoryDb = { registrations: [], referralVisits: [] };
 var databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 var pgPool = null;
 var pgInitialized = false;
+var lastPgError = null;
 if (databaseUrl) {
   try {
     pgPool = new pg.Pool({
       connectionString: databaseUrl,
       ssl: databaseUrl.includes("localhost") ? false : { rejectUnauthorized: false },
-      max: 10,
+      max: 5,
       idleTimeoutMillis: 3e4,
-      connectionTimeoutMillis: 5e3
+      connectionTimeoutMillis: 7e3
     });
-    console.log("Managed PostgreSQL Pool configured for persistent registrations.");
+    pgPool.on("error", (err) => {
+      lastPgError = err?.message || String(err);
+      console.warn("[PostgreSQL Pool Notice] Handled idle pool event:", lastPgError);
+    });
+    console.log("[PostgreSQL Pool Configured] Persistent storage active for Marion Undefeated Giveaway.");
   } catch (err) {
-    console.warn("Failed to initialize PostgreSQL pool, falling back to persistent file store:", err);
+    lastPgError = err?.message || String(err);
+    console.warn("[PostgreSQL Init Notice] Pool creation failed, using resilient fallback:", lastPgError);
     pgPool = null;
   }
 }
@@ -62,18 +72,27 @@ async function initPgTables() {
           visited_at TIMESTAMPTZ NOT NULL
         );
 
+        -- Admin credentials & settings table
+        CREATE TABLE IF NOT EXISTS giveaway_admin_settings (
+          key VARCHAR(64) PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+
         -- Safe column migrations for direct admin WhatsApp notification
         ALTER TABLE giveaway_registrations ADD COLUMN IF NOT EXISTS admin_notified BOOLEAN DEFAULT FALSE;
         ALTER TABLE giveaway_registrations ADD COLUMN IF NOT EXISTS admin_notified_at TIMESTAMPTZ;
         ALTER TABLE giveaway_registrations ADD COLUMN IF NOT EXISTS notify_error TEXT;
       `);
       pgInitialized = true;
-      console.log("PostgreSQL giveaway_registrations table verified.");
+      lastPgError = null;
+      console.log("[PostgreSQL Tables Verified] giveaway_registrations and giveaway_admin_settings ready.");
     } finally {
       client.release();
     }
   } catch (err) {
-    console.warn("PostgreSQL table initialization warning (using local fallback):", err);
+    lastPgError = err?.message || String(err);
+    console.warn("[PostgreSQL Table Init Warning]:", lastPgError);
   }
 }
 function resolveDbPath() {
@@ -443,6 +462,116 @@ async function getGiveawayStatsAsync() {
     networkCounts
   };
 }
+function timingSafeEqualString(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const bufA = Buffer.from(a, "utf8");
+  const bufB = Buffer.from(b, "utf8");
+  if (bufA.length !== bufB.length) {
+    crypto.timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+function getAdminAuthSecret() {
+  const adminSecret = process.env.ADMIN_SESSION_SECRET || process.env.ADMIN_PASSWORD;
+  if (!adminSecret || !adminSecret.trim()) {
+    return "";
+  }
+  return crypto.createHash("sha256").update(`MarionUndefeatedAuthKey:${adminSecret.trim()}`).digest("hex");
+}
+async function verifyAdminPasswordAsync(inputPassword) {
+  const trimmedInput = typeof inputPassword === "string" ? inputPassword.trim() : "";
+  if (!trimmedInput) {
+    return { valid: false, reason: "Password cannot be empty." };
+  }
+  const envPassword = process.env.ADMIN_PASSWORD ? process.env.ADMIN_PASSWORD.trim() : null;
+  if (!envPassword) {
+    console.warn("[Admin Security Alert]: ADMIN_PASSWORD environment variable is not configured. Access is strictly denied.");
+    return {
+      valid: false,
+      reason: "Administrator authentication is not configured on the server. Please set the ADMIN_PASSWORD environment variable in your Vercel project settings."
+    };
+  }
+  const matches = timingSafeEqualString(trimmedInput, envPassword);
+  return {
+    valid: matches,
+    reason: matches ? void 0 : "Invalid administrator password."
+  };
+}
+function createAdminSessionToken() {
+  const secret = getAdminAuthSecret();
+  if (!secret) {
+    console.warn("[Admin Security Alert]: Cannot generate session token because ADMIN_PASSWORD is not configured.");
+    return null;
+  }
+  const timestampHex = Date.now().toString(16);
+  const nonceHex = crypto.randomBytes(16).toString("hex");
+  const payload = `${timestampHex}.${nonceHex}`;
+  const signature = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+  return `mu_${payload}.${signature}`;
+}
+function verifyAdminSessionToken(token) {
+  if (typeof token !== "string" || !token.startsWith("mu_")) {
+    return false;
+  }
+  const secret = getAdminAuthSecret();
+  if (!secret) {
+    return false;
+  }
+  const raw = token.slice(3);
+  const parts = raw.split(".");
+  if (parts.length !== 3) {
+    return false;
+  }
+  const [timestampHex, nonceHex, signatureHex] = parts;
+  if (!timestampHex || !nonceHex || !signatureHex) {
+    return false;
+  }
+  const issuedAt = parseInt(timestampHex, 16);
+  if (isNaN(issuedAt)) {
+    return false;
+  }
+  const MAX_TOKEN_AGE_MS = 7 * 24 * 60 * 60 * 1e3;
+  const now = Date.now();
+  if (issuedAt > now + 5 * 60 * 1e3 || now - issuedAt > MAX_TOKEN_AGE_MS) {
+    return false;
+  }
+  const payload = `${timestampHex}.${nonceHex}`;
+  const expectedSignature = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+  return timingSafeEqualString(signatureHex, expectedSignature);
+}
+async function getDatabaseStatusAsync() {
+  const isUrlProvided = Boolean(process.env.DATABASE_URL || process.env.POSTGRES_URL);
+  let isConnected = false;
+  let tableCount = 0;
+  let testError = lastPgError;
+  if (pgPool) {
+    try {
+      const client = await pgPool.connect();
+      try {
+        const testRes = await client.query("SELECT 1 as ping");
+        isConnected = Boolean(testRes.rows && testRes.rows[0]?.ping === 1);
+        const countRes = await client.query("SELECT count(*) FROM giveaway_registrations");
+        tableCount = parseInt(countRes.rows[0]?.count, 10) || 0;
+        testError = null;
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      isConnected = false;
+      testError = err?.message || String(err);
+    }
+  }
+  const fallbackCount = readDb().registrations.length;
+  return {
+    databaseConfigured: isUrlProvided,
+    storageEngine: isConnected ? "Supabase / PostgreSQL (Managed Persistent)" : "Resilient File / Memory Fallback",
+    connectionActive: isConnected,
+    tablesInitialized: pgInitialized,
+    totalRecordsInDb: isConnected ? tableCount : fallbackCount,
+    lastDiagnosticMessage: testError || (isConnected ? "Database connection healthy and operational." : "Operating on fallback storage mode.")
+  };
+}
 
 // server/whatsapp.ts
 async function sendDirectWhatsAppNotification(params) {
@@ -573,10 +702,21 @@ A participant has completed the sharing requirement and submitted their entry:
 
 // server/app.ts
 var app = express();
-var ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "marion2026";
-var ADMIN_TOKEN = "mu-admin-auth-session-token-2026";
 app.use(express.json());
 app.use((req, _res, next) => {
+  if (typeof req.body === "string" && req.body.trim().startsWith("{")) {
+    try {
+      req.body = JSON.parse(req.body);
+    } catch {
+    }
+  }
+  next();
+});
+app.use((req, _res, next) => {
+  if (req.query && typeof req.query.__api_path === "string") {
+    const rawPath = req.query.__api_path;
+    req.url = rawPath.startsWith("/") ? `/api${rawPath}` : `/api/${rawPath}`;
+  }
   const forwarded = req.headers["x-forwarded-uri"] || req.headers["x-vercel-matched-path"] || req.headers["x-matched-path"];
   if (forwarded && (req.url.startsWith("/api/index") || req.url === "/api/index")) {
     req.url = forwarded;
@@ -936,23 +1076,76 @@ app.post(["/api/notify-admin-direct", "/notify-admin-direct"], async (req, res) 
 });
 var checkAdminAuth = (req, res, next) => {
   const authHeader = req.headers.authorization;
-  const token = authHeader?.replace("Bearer ", "") || req.headers["x-admin-token"] || (typeof req.query.token === "string" ? req.query.token : void 0);
-  if (token === ADMIN_TOKEN) {
+  const token = authHeader?.replace("Bearer ", "").trim() || (typeof req.headers["x-admin-token"] === "string" ? req.headers["x-admin-token"].trim() : void 0) || (typeof req.query.token === "string" ? req.query.token.trim() : void 0);
+  if (token && verifyAdminSessionToken(token)) {
     return next();
   }
-  return res.status(401).json({ error: "Unauthorized: Administrator access required." });
+  return res.status(401).json({ error: "Unauthorized: Valid administrator session required." });
 };
-app.post(["/api/admin/login", "/admin/login"], (req, res) => {
-  const { password, email } = req.body || {};
-  const trimmed = typeof password === "string" ? password.trim() : "";
-  if (process.env.ADMIN_PASSWORD && trimmed === process.env.ADMIN_PASSWORD.trim() || ADMIN_PASSWORD && trimmed === ADMIN_PASSWORD.trim() || trimmed === "undefeated2026" || trimmed === "marion2026" || trimmed === "08057231961" || trimmed === "2348057231961") {
-    return res.status(200).json({
-      success: true,
-      token: ADMIN_TOKEN,
-      adminEmail: email || "iyahmarion24@gmail.com"
+app.get(["/api/diagnostic", "/api/admin/diagnostic"], async (_req, res) => {
+  try {
+    const dbStatus = await getDatabaseStatusAsync();
+    res.status(200).json({
+      service: "Marion Undefeated Airtime Giveaway 2026",
+      environment: process.env.VERCEL ? "Vercel Serverless" : "Node.js Server",
+      adminPasswordConfigured: Boolean(process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD.trim()),
+      adminSessionKeyPersistent: Boolean(
+        process.env.ADMIN_SESSION_SECRET && process.env.ADMIN_SESSION_SECRET.trim() || process.env.ADMIN_PASSWORD && process.env.ADMIN_PASSWORD.trim()
+      ),
+      adminSessionKeySource: process.env.ADMIN_SESSION_SECRET ? "Dedicated (ADMIN_SESSION_SECRET)" : process.env.ADMIN_PASSWORD ? "Derived (ADMIN_PASSWORD)" : "Not Configured",
+      adminWhatsAppConfigured: Boolean(process.env.ADMIN_WHATSAPP || process.env.ADMIN_WHATSAPP_NUMBER),
+      adminWhatsAppNumber: "2348057231961",
+      whatsappApiRequired: false,
+      whatsappDeliveryMode: process.env.WHATSAPP_ACCESS_TOKEN || process.env.TWILIO_ACCOUNT_SID ? "Automated Cloud API" : "Direct WhatsApp Chat Fallback (08057231961)",
+      database: dbStatus,
+      uptimeSeconds: Math.floor(process.uptime())
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: "Diagnostic check failed: " + (err?.message || err)
     });
   }
-  return res.status(401).json({ error: "Invalid administrator password." });
+});
+app.post(["/api/admin/login", "/admin/login"], async (req, res) => {
+  try {
+    let body = req.body;
+    if (typeof body === "string") {
+      try {
+        body = JSON.parse(body);
+      } catch {
+      }
+    }
+    const { password, email } = body || {};
+    const trimmed = typeof password === "string" ? password.trim() : "";
+    console.log("[Admin Security]: Administrator authentication attempt received.");
+    if (!trimmed) {
+      return res.status(400).json({ error: "Please enter the administrator passcode." });
+    }
+    const verification = await verifyAdminPasswordAsync(trimmed);
+    if (verification.valid) {
+      const sessionToken = createAdminSessionToken();
+      if (!sessionToken) {
+        return res.status(500).json({
+          error: "Failed to generate administrator session token. Ensure ADMIN_PASSWORD is set on the server."
+        });
+      }
+      console.log("[Admin Security]: Administrator successfully authenticated. Session token generated.");
+      return res.status(200).json({
+        success: true,
+        token: sessionToken,
+        adminEmail: email || "iyahmarion24@gmail.com"
+      });
+    }
+    console.warn("[Admin Security Alert]: Administrator authentication failed \u2014 invalid credentials.");
+    return res.status(401).json({
+      error: verification.reason || "Invalid administrator password."
+    });
+  } catch (err) {
+    console.error("[Admin Security Fatal]:", err?.message || err);
+    return res.status(500).json({
+      error: `Login processing error: ${err?.message || "Internal server error"}`
+    });
+  }
 });
 app.get(["/api/admin/registrations", "/admin/registrations"], checkAdminAuth, async (_req, res) => {
   try {
@@ -1033,10 +1226,10 @@ app.get(["/api/admin/export-csv", "/admin/export-csv"], checkAdminAuth, async (_
     res.status(500).json({ error: error?.message || "Failed to generate CSV export." });
   }
 });
-app.all("/api/*", (req, res) => {
+app.all(["/api", "/api/*"], (req, res) => {
   res.status(404).json({
     error: `API route not found: ${req.method} ${req.path}`,
-    validEndpoints: ["/api/stats", "/api/register", "/api/confirm-share", "/api/status/:query", "/api/admin/login"]
+    validEndpoints: ["/api/stats", "/api/register", "/api/confirm-share", "/api/status/:query", "/api/admin/login", "/api/diagnostic"]
   });
 });
 app.use((err, _req, res, _next) => {
