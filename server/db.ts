@@ -628,17 +628,13 @@ export function getGiveawayStats() {
 
 /**
  * Constant-time string equality check to prevent timing analysis attacks.
+ * Uses SHA-256 hashing to compare fixed 32-byte digests in constant time.
  */
 export function timingSafeEqualString(a: string, b: string): boolean {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
-  const bufA = Buffer.from(a, 'utf8');
-  const bufB = Buffer.from(b, 'utf8');
-  if (bufA.length !== bufB.length) {
-    // Constant time dummy comparison
-    crypto.timingSafeEqual(bufA, bufA);
-    return false;
-  }
-  return crypto.timingSafeEqual(bufA, bufB);
+  const hashA = crypto.createHash('sha256').update(Buffer.from(a, 'utf8')).digest();
+  const hashB = crypto.createHash('sha256').update(Buffer.from(b, 'utf8')).digest();
+  return crypto.timingSafeEqual(hashA, hashB);
 }
 
 /**

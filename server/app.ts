@@ -21,18 +21,22 @@ import { sendDirectWhatsAppNotification } from './whatsapp';
 
 export const app = express();
 
-// Middleware for parsing JSON requests safely
-app.use(express.json());
-
-// Normalize string or pre-parsed request bodies (safely handles Vercel serverless runtime)
+// 1. Normalize pre-parsed request bodies from serverless runtimes (Vercel, Cloud Functions)
+// CRITICAL: Must run BEFORE express.json() so body-parser does not hang on consumed streams!
 app.use((req, _res, next) => {
-  if (typeof req.body === 'string' && req.body.trim().startsWith('{')) {
-    try {
-      req.body = JSON.parse(req.body);
-    } catch {}
+  if (req.body !== undefined && req.body !== null) {
+    if (typeof req.body === 'string' && req.body.trim().startsWith('{')) {
+      try {
+        req.body = JSON.parse(req.body);
+      } catch {}
+    }
+    (req as any)._body = true;
   }
   next();
 });
+
+// 2. Middleware for parsing JSON requests safely on unconsumed streams
+app.use(express.json());
 
 // Normalization middleware for Vercel Serverless & proxy environments
 app.use((req, _res, next) => {

@@ -464,13 +464,9 @@ async function getGiveawayStatsAsync() {
 }
 function timingSafeEqualString(a, b) {
   if (typeof a !== "string" || typeof b !== "string") return false;
-  const bufA = Buffer.from(a, "utf8");
-  const bufB = Buffer.from(b, "utf8");
-  if (bufA.length !== bufB.length) {
-    crypto.timingSafeEqual(bufA, bufA);
-    return false;
-  }
-  return crypto.timingSafeEqual(bufA, bufB);
+  const hashA = crypto.createHash("sha256").update(Buffer.from(a, "utf8")).digest();
+  const hashB = crypto.createHash("sha256").update(Buffer.from(b, "utf8")).digest();
+  return crypto.timingSafeEqual(hashA, hashB);
 }
 function getAdminAuthSecret() {
   const adminSecret = process.env.ADMIN_SESSION_SECRET || process.env.ADMIN_PASSWORD;
@@ -702,16 +698,19 @@ A participant has completed the sharing requirement and submitted their entry:
 
 // server/app.ts
 var app = express();
-app.use(express.json());
 app.use((req, _res, next) => {
-  if (typeof req.body === "string" && req.body.trim().startsWith("{")) {
-    try {
-      req.body = JSON.parse(req.body);
-    } catch {
+  if (req.body !== void 0 && req.body !== null) {
+    if (typeof req.body === "string" && req.body.trim().startsWith("{")) {
+      try {
+        req.body = JSON.parse(req.body);
+      } catch {
+      }
     }
+    req._body = true;
   }
   next();
 });
+app.use(express.json());
 app.use((req, _res, next) => {
   if (req.query && typeof req.query.__api_path === "string") {
     const rawPath = req.query.__api_path;
