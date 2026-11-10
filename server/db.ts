@@ -759,23 +759,40 @@ export async function getDatabaseStatusAsync() {
 
   if (pgPool) {
     try {
-      const client = await pgPool.connect();
-      try {
-        const testRes = await client.query('SELECT 1 as ping');
-        isConnected = Boolean(testRes.rows && testRes.rows[0]?.ping === 1);
-        const countRes = await client.query('SELECT count(*) FROM giveaway_registrations');
-        tableCount = parseInt(countRes.rows[0]?.count, 10) || 0;
-        testError = null;
-      } finally {
-        client.release();
-      }
+      // 3.5-second timeout protection for serverless diagnostic check
+      await Promise.race([
+        (async () => {
+          const client = await pgPool!.connect();
+          try {
+            const testRes = await client.query('SELECT 1 as ping');
+            isConnected = Boolean(testRes.rows && testRes.rows[0]?.ping === 1);
+            try {
+              const countRes = await client.query('SELECT count(*) FROM giveaway_registrations');
+              tableCount = parseInt(countRes.rows[0]?.count, 10) || 0;
+            } catch {
+              tableCount = 0;
+            }
+            testError = null;
+          } finally {
+            client.release();
+          }
+        })(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('PostgreSQL connection check timed out after 3.5s')), 3500)
+        ),
+      ]);
     } catch (err: any) {
       isConnected = false;
       testError = err?.message || String(err);
     }
   }
 
-  const fallbackCount = readDb().registrations.length;
+  let fallbackCount = 0;
+  try {
+    fallbackCount = readDb().registrations.length;
+  } catch {
+    fallbackCount = 0;
+  }
 
   return {
     databaseConfigured: isUrlProvided,

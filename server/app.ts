@@ -473,7 +473,7 @@ const checkAdminAuth = (req: express.Request, res: express.Response, next: expre
 };
 
 // Safe diagnostic endpoint to verify database and environment health on Vercel
-app.get(['/api/diagnostic', '/api/admin/diagnostic'], async (_req, res) => {
+app.get(['/api/diagnostic', '/api/admin/diagnostic', '/diagnostic'], async (_req, res) => {
   try {
     const dbStatus = await getDatabaseStatusAsync();
     res.status(200).json({

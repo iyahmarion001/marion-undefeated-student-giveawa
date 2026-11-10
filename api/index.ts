@@ -3,6 +3,21 @@ import { app } from '../server/app';
 // Export handler for Vercel Serverless Functions with URL normalization and async completion guarantee
 export default function handler(req: any, res: any) {
   return new Promise((resolve) => {
+    // 9-second safety timeout: guarantee response before Vercel serverless gateway timeout
+    const timeoutTimer = setTimeout(() => {
+      if (!res.headersSent) {
+        res.statusCode = 504;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ error: 'Gateway timeout processing request.' }));
+      }
+      resolve(true);
+    }, 9000);
+
+    const finish = () => {
+      clearTimeout(timeoutTimer);
+      resolve(true);
+    };
+
     try {
       // 1. URL Path Normalization for Vercel
       const urlObj = new URL(req.url, 'http://localhost');
@@ -35,8 +50,8 @@ export default function handler(req: any, res: any) {
       }
 
       // 3. Resolve the serverless promise when response finishes or closes
-      res.once('finish', () => resolve(true));
-      res.once('close', () => resolve(true));
+      res.once('finish', finish);
+      res.once('close', finish);
 
       // 4. Invoke Express application safely with error fallback
       (app as any)(req, res, (err: any) => {
@@ -48,7 +63,7 @@ export default function handler(req: any, res: any) {
             error: `Serverless execution error: ${err?.message || 'Unknown error'}`,
           }));
         }
-        resolve(true);
+        finish();
       });
     } catch (err: any) {
       console.error('[Vercel Handler Fatal]:', err);
@@ -59,7 +74,7 @@ export default function handler(req: any, res: any) {
           error: `Serverless execution error: ${err?.message || 'Unknown error'}`,
         }));
       }
-      resolve(true);
+      finish();
     }
   });
 }

@@ -543,22 +543,38 @@ async function getDatabaseStatusAsync() {
   let testError = lastPgError;
   if (pgPool) {
     try {
-      const client = await pgPool.connect();
-      try {
-        const testRes = await client.query("SELECT 1 as ping");
-        isConnected = Boolean(testRes.rows && testRes.rows[0]?.ping === 1);
-        const countRes = await client.query("SELECT count(*) FROM giveaway_registrations");
-        tableCount = parseInt(countRes.rows[0]?.count, 10) || 0;
-        testError = null;
-      } finally {
-        client.release();
-      }
+      await Promise.race([
+        (async () => {
+          const client = await pgPool.connect();
+          try {
+            const testRes = await client.query("SELECT 1 as ping");
+            isConnected = Boolean(testRes.rows && testRes.rows[0]?.ping === 1);
+            try {
+              const countRes = await client.query("SELECT count(*) FROM giveaway_registrations");
+              tableCount = parseInt(countRes.rows[0]?.count, 10) || 0;
+            } catch {
+              tableCount = 0;
+            }
+            testError = null;
+          } finally {
+            client.release();
+          }
+        })(),
+        new Promise(
+          (_, reject) => setTimeout(() => reject(new Error("PostgreSQL connection check timed out after 3.5s")), 3500)
+        )
+      ]);
     } catch (err) {
       isConnected = false;
       testError = err?.message || String(err);
     }
   }
-  const fallbackCount = readDb().registrations.length;
+  let fallbackCount = 0;
+  try {
+    fallbackCount = readDb().registrations.length;
+  } catch {
+    fallbackCount = 0;
+  }
   return {
     databaseConfigured: isUrlProvided,
     storageEngine: isConnected ? "Supabase / PostgreSQL (Managed Persistent)" : "Resilient File / Memory Fallback",
@@ -1081,7 +1097,7 @@ var checkAdminAuth = (req, res, next) => {
   }
   return res.status(401).json({ error: "Unauthorized: Valid administrator session required." });
 };
-app.get(["/api/diagnostic", "/api/admin/diagnostic"], async (_req, res) => {
+app.get(["/api/diagnostic", "/api/admin/diagnostic", "/diagnostic"], async (_req, res) => {
   try {
     const dbStatus = await getDatabaseStatusAsync();
     res.status(200).json({
