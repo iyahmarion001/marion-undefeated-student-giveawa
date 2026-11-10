@@ -223,7 +223,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Filter registrations
   const filtered = list.filter((reg) => {
     if (!reg) return false;
-    const phone = String(reg.phoneNumber || '');
+    const phone = String(reg.phoneNumber || (reg as any).phone_number || (reg as any).phone || '');
     const name = String(reg.fullName || '');
     const ref = String(reg.referralCode || '');
     const by = String(reg.referredBy || '');
@@ -624,6 +624,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   const isPaid = reg.rewardStatus === 'credited';
                   const isApproved = reg.rewardStatus === 'approved';
                   const isDeclined = reg.rewardStatus === 'declined';
+                  const fullPhone = toSafeString(reg.phoneNumber || (reg as any).phone_number || (reg as any).phone);
 
                   return (
                     <div
@@ -640,15 +641,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="flex items-center gap-1.5 font-mono font-bold text-white text-sm">
-                            <span>{toSafeString(reg.phoneNumber)}</span>
+                          <div className="flex items-center gap-1.5 font-mono font-bold text-white text-sm whitespace-nowrap">
+                            <span className="select-all tracking-wide">{fullPhone}</span>
                             <button
                               type="button"
-                              onClick={() => handleCopyPhone(reg.phoneNumber)}
+                              onClick={() => handleCopyPhone(fullPhone)}
                               className="p-1 rounded text-slate-400 hover:text-white"
                               title="Copy Phone"
                             >
-                              {copiedPhone === reg.phoneNumber ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                              {copiedPhone === fullPhone ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                             </button>
                           </div>
                           <div className="flex items-center gap-1 text-[11px] text-blue-300 font-mono mt-0.5">
@@ -752,7 +753,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                         <button
                           type="button"
-                          onClick={() => handleOpenStudentWhatsApp(reg.phoneNumber, reg.fullName)}
+                          onClick={() => handleOpenStudentWhatsApp(fullPhone, reg.fullName)}
                           className="tap-bounce p-1.5 rounded-lg bg-[#25D366] text-slate-950"
                           title="Contact student on WhatsApp"
                         >
@@ -801,6 +802,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         const isCredited = reg.rewardStatus === 'credited';
                         const isApproved = reg.rewardStatus === 'approved';
                         const isDeclined = reg.rewardStatus === 'declined';
+                        const fullPhone = toSafeString(reg.phoneNumber || (reg as any).phone_number || (reg as any).phone);
 
                         return (
                           <tr 
@@ -817,15 +819,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           >
                             {/* Phone & Student Info */}
                             <td className="py-3 px-3.5 align-middle">
-                              <div className="font-mono font-bold text-white text-xs sm:text-sm flex items-center gap-1.5">
-                                <span>{toSafeString(reg.phoneNumber)}</span>
+                              <div className="font-mono font-bold text-white text-xs sm:text-sm flex items-center gap-1.5 whitespace-nowrap">
+                                <span className="select-all tracking-wide">{fullPhone}</span>
                                 <button
                                   type="button"
-                                  onClick={() => handleCopyPhone(reg.phoneNumber)}
+                                  onClick={() => handleCopyPhone(fullPhone)}
                                   className="tap-bounce p-1 rounded hover:bg-blue-800/60 text-slate-400 hover:text-white cursor-pointer"
                                   title="Copy phone number for recharge"
                                 >
-                                  {copiedPhone === reg.phoneNumber ? (
+                                  {copiedPhone === fullPhone ? (
                                     <Check className="w-3.5 h-3.5 text-emerald-400" />
                                   ) : (
                                     <Copy className="w-3.5 h-3.5" />
@@ -833,7 +835,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => handleOpenStudentWhatsApp(reg.phoneNumber, reg.fullName)}
+                                  onClick={() => handleOpenStudentWhatsApp(fullPhone, reg.fullName)}
                                   className="p-1 rounded text-emerald-400 hover:text-emerald-300"
                                   title="Chat with student on WhatsApp"
                                 >
