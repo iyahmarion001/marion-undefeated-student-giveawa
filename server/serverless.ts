@@ -1,4 +1,4 @@
-import { app } from '../server/app';
+import { app } from './app';
 
 // Export handler for Vercel Serverless Functions with URL normalization and async completion guarantee
 export default function handler(req: any, res: any) {
