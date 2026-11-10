@@ -179,8 +179,12 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
     setIsSubmittingReg(false);
 
     if (res.success && res.registration) {
-      setCurrentRegistration(res.registration);
-      saveStoredRegistration(res.registration);
+      const regWithFullPhone: ParticipantRegistration = {
+        ...res.registration,
+        phoneNumber: res.registration.phoneNumber || phoneNumber,
+      };
+      setCurrentRegistration(regWithFullPhone);
+      saveStoredRegistration(regWithFullPhone);
 
       if (res.registration.shareConfirmed) {
         // Already confirmed earlier
@@ -238,8 +242,12 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
     setIsConfirmingShare(false);
 
     if (res.success && res.registration) {
-      setCurrentRegistration(res.registration);
-      saveStoredRegistration(res.registration);
+      const regWithFullPhone: ParticipantRegistration = {
+        ...res.registration,
+        phoneNumber: res.registration.phoneNumber || currentRegistration?.phoneNumber || phoneNumber,
+      };
+      setCurrentRegistration(regWithFullPhone);
+      saveStoredRegistration(regWithFullPhone);
       setCurrentStep('awaiting_review');
       onShowToast('Share confirmation recorded! Status: Share Confirmed – Awaiting Review.');
     } else {
@@ -274,10 +282,11 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
 
     trackNotifyAdminClick(currentRegistration.id);
 
+    const studentFullPhone = currentRegistration.phoneNumber || phoneNumber || '';
+
     const msg = buildAdminWhatsAppMessage({
       id: currentRegistration.id,
-      phoneNumber: currentRegistration.phoneNumber,
-      phoneMasked: currentRegistration.phoneMasked,
+      phoneNumber: studentFullPhone,
       network: currentRegistration.network,
       referralCode: currentRegistration.referralCode,
       shareMethod: currentRegistration.shareMethod,
@@ -295,10 +304,10 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
 
   const handleCopyAdminProof = () => {
     if (!currentRegistration) return;
+    const studentFullPhone = currentRegistration.phoneNumber || phoneNumber || '';
     const msg = buildAdminWhatsAppMessage({
       id: currentRegistration.id,
-      phoneNumber: currentRegistration.phoneNumber,
-      phoneMasked: currentRegistration.phoneMasked,
+      phoneNumber: studentFullPhone,
       network: currentRegistration.network,
       referralCode: currentRegistration.referralCode,
       shareMethod: currentRegistration.shareMethod,
@@ -339,8 +348,12 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
       setDirectNotifyResult(res);
 
       if (res.registration) {
-        setCurrentRegistration(res.registration);
-        saveStoredRegistration(res.registration);
+        const regWithFullPhone: ParticipantRegistration = {
+          ...res.registration,
+          phoneNumber: res.registration.phoneNumber || currentRegistration?.phoneNumber || phoneNumber,
+        };
+        setCurrentRegistration(regWithFullPhone);
+        saveStoredRegistration(regWithFullPhone);
       }
 
       if (res.sent) {
@@ -1145,34 +1158,23 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Requirement 6: Despo Chat Optional Community Invitation (Directly below Notify Admin) */}
-                  <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#03152c] to-[#042042] border border-emerald-500/50 shadow-md flex items-center justify-between gap-3 animate-fade-in">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-[#25D366]/20 border border-[#25D366]/40 text-[#25D366] flex items-center justify-center shrink-0">
-                        <Users className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="text-xs sm:text-sm font-extrabold text-white flex items-center gap-2">
-                          <span>Join Despo Chat for More Giveaways</span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                            Optional
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-blue-200 mt-0.5">
-                          Connect with fellow students for upcoming airtime drops and campus updates.
-                        </p>
-                      </div>
+                  {/* Despo Chat Community Invitation (Immediately below Notify Admin) */}
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-[#03152c] to-[#042042] border border-blue-700/60 shadow-md space-y-3 animate-fade-in">
+                    <p className="text-xs sm:text-sm text-blue-100 font-medium leading-relaxed">
+                      Want to receive updates and information about more giveaways? Join our Despo Chat group!
+                    </p>
+                    <div>
+                      <a
+                        href="https://chat.whatsapp.com/FFF0LzGU0lwK87cMv9KUDB?s=cl&p=a&iam=2"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="tap-bounce inline-flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-slate-950 font-black text-xs sm:text-sm shadow-md shadow-[#25D366]/25 transition-all cursor-pointer"
+                      >
+                        <MessageCircle className="w-4 h-4 fill-slate-950" />
+                        <span>Join Despo Chat Group (Optional)</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
                     </div>
-
-                    <a
-                      href="https://chat.whatsapp.com/FFF0LzGU0lwK87cMv9KUDB?s=cl&p=a&iam=2"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="tap-bounce px-3.5 py-2 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-slate-950 font-black text-xs flex items-center gap-1.5 shrink-0 shadow-md shadow-[#25D366]/20 transition-all cursor-pointer"
-                    >
-                      <span>Join Despo Chat</span>
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
                   </div>
 
                   {currentRegistration.rewardStatus === 'credited' ? (

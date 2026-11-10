@@ -46,7 +46,7 @@ export async function sendDirectWhatsAppNotification(
   const messageBody =
     `🎁 *MARION UNDEFEATED GIVEAWAY 2026 – NEW ENTRY*\n\n` +
     `A participant has completed the sharing requirement and submitted their entry:\n\n` +
-    `📱 *Student Phone:* ${params.phoneNumber}\n` +
+    `📱 *Student Phone Number:* ${params.phoneNumber}\n` +
     `📶 *Network:* ${params.network.toUpperCase()}\n` +
     `💰 *Requested Airtime:* ₦${params.airtimeAmount}\n` +
     `🆔 *Registration ID:* ${params.registrationId}\n` +

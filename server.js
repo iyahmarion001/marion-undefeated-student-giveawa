@@ -593,7 +593,7 @@ async function sendDirectWhatsAppNotification(params) {
 
 A participant has completed the sharing requirement and submitted their entry:
 
-\u{1F4F1} *Student Phone:* ${params.phoneNumber}
+\u{1F4F1} *Student Phone Number:* ${params.phoneNumber}
 \u{1F4F6} *Network:* ${params.network.toUpperCase()}
 \u{1F4B0} *Requested Airtime:* \u20A6${params.airtimeAmount}
 \u{1F194} *Registration ID:* ${params.registrationId}

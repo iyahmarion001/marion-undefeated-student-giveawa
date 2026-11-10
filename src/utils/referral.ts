@@ -177,11 +177,16 @@ export function buildAdminWhatsAppMessage(registration: {
     ? new Date(registration.shareConfirmedAt).toLocaleString()
     : new Date().toLocaleString();
 
+  // Show complete student phone number exactly as submitted; never display a masked/shortened number
+  const studentPhoneNumber = registration.phoneNumber && !registration.phoneNumber.includes('•') && !registration.phoneNumber.includes('...')
+    ? registration.phoneNumber
+    : (registration.phoneNumber || 'N/A');
+
   return (
     `👋 *HELLO MARION UNDEFEATED ADMIN!*\n\n` +
     `I have registered for the *Student Airtime Giveaway 2026* and completed the sharing requirement. Here are my submission details:\n\n` +
     `📌 *Registration ID:* ${registration.id}\n` +
-    `📱 *Phone Number:* ${registration.phoneNumber || registration.phoneMasked || 'N/A'}\n` +
+    `📱 *Student Phone Number:* ${studentPhoneNumber}\n` +
     `📶 *Network Provider:* ${registration.network.toUpperCase()}\n` +
     `💰 *Requested Airtime:* ₦200\n` +
     `🔑 *Referral Code:* ${registration.referralCode}\n` +
