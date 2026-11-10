@@ -105,32 +105,12 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
       // Check if participant already has a stored registration on this device
       const stored = getStoredRegistration();
       if (stored) {
-        const backupPhone = localStorage.getItem('marion_undefeated_student_phone');
-        const resolvedPhone = stored.phoneNumber || 
-          (stored as any).phone_number || 
-          (backupPhone && !backupPhone.includes('•') && !backupPhone.includes('...') ? backupPhone : '');
-
-        if (resolvedPhone) {
-          stored.phoneNumber = resolvedPhone;
-          setPhoneNumber(resolvedPhone);
-        }
         setCurrentRegistration(stored);
         if (stored.network) {
           setSelectedNetwork(stored.network);
         }
-
-        // If stored record is missing phone number, fetch full record from server to repair it
-        if ((!stored.phoneNumber || stored.phoneNumber.includes('•') || stored.phoneNumber.includes('...')) && (stored.id || stored.referralCode)) {
-          lookupStatus(stored.id || stored.referralCode).then((res) => {
-            if (res.found && res.registration && res.registration.phoneNumber) {
-              setCurrentRegistration((prev) => ({
-                ...(prev || stored),
-                phoneNumber: res.registration!.phoneNumber,
-              }));
-              setPhoneNumber(res.registration.phoneNumber);
-              saveStoredRegistration(res.registration);
-            }
-          }).catch(() => {});
+        if (stored.phoneNumber) {
+          setPhoneNumber(stored.phoneNumber);
         }
 
         // Determine step based on stored record
@@ -303,50 +283,16 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
     }
   };
 
-  // Helper to resolve the complete, unmasked student phone number from all available sources
-  const resolveStudentPhoneNumber = (): string => {
-    // 1. Check currentRegistration.phoneNumber
-    const p1 = currentRegistration?.phoneNumber;
-    if (p1 && !p1.includes('•') && !p1.includes('...') && p1.length >= 10) {
-      return p1;
-    }
-    // 2. Check alternate property names (phone_number, phone)
-    const p2 = (currentRegistration as any)?.phone_number || (currentRegistration as any)?.phone;
-    if (p2 && typeof p2 === 'string' && !p2.includes('•') && !p2.includes('...') && p2.length >= 10) {
-      return p2;
-    }
-    // 3. Check component's state phoneNumber
-    if (phoneNumber && !phoneNumber.includes('•') && !phoneNumber.includes('...') && phoneNumber.length >= 10) {
-      return phoneNumber;
-    }
-    // 4. Check dedicated localStorage backup
-    if (typeof window !== 'undefined') {
-      try {
-        const pLocal = localStorage.getItem('marion_undefeated_student_phone');
-        if (pLocal && !pLocal.includes('•') && !pLocal.includes('...') && pLocal.length >= 10) {
-          return pLocal;
-        }
-      } catch {}
-    }
-    // 5. Check lookupQuery if user searched by phone
-    const cleanLookup = lookupQuery.replace(/\D/g, '');
-    if (cleanLookup.length >= 10) {
-      return cleanLookup.startsWith('0') ? cleanLookup : '0' + cleanLookup;
-    }
-    return p1 || p2 || phoneNumber || '';
-  };
-
   // Notify Admin via WhatsApp (Number: 2348057231961)
   const handleNotifyAdminWhatsApp = () => {
     if (!currentRegistration) return;
 
     trackNotifyAdminClick(currentRegistration.id);
 
-    const studentFullPhone = resolveStudentPhoneNumber();
-
     const msg = buildAdminWhatsAppMessage({
       id: currentRegistration.id,
-      phoneNumber: studentFullPhone,
+      phoneNumber: currentRegistration.phoneNumber || phoneNumber,
+      phoneMasked: currentRegistration.phoneMasked,
       network: currentRegistration.network,
       referralCode: currentRegistration.referralCode,
       shareMethod: currentRegistration.shareMethod,
@@ -364,10 +310,10 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
 
   const handleCopyAdminProof = () => {
     if (!currentRegistration) return;
-    const studentFullPhone = resolveStudentPhoneNumber();
     const msg = buildAdminWhatsAppMessage({
       id: currentRegistration.id,
-      phoneNumber: studentFullPhone,
+      phoneNumber: currentRegistration.phoneNumber || phoneNumber,
+      phoneMasked: currentRegistration.phoneMasked,
       network: currentRegistration.network,
       referralCode: currentRegistration.referralCode,
       shareMethod: currentRegistration.shareMethod,
@@ -397,12 +343,10 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
     setIsDirectNotifying(true);
     setDirectNotifyResult(null);
 
-    const studentFullPhone = resolveStudentPhoneNumber();
-
     try {
       const res = await notifyAdminDirectly({
         id: currentRegistration.id,
-        phoneNumber: studentFullPhone,
+        phoneNumber: currentRegistration.phoneNumber || phoneNumber,
         referralCode: currentRegistration.referralCode,
       });
 
@@ -410,12 +354,8 @@ export const ParticipationModal: React.FC<ParticipationModalProps> = ({
       setDirectNotifyResult(res);
 
       if (res.registration) {
-        const regWithFullPhone: ParticipantRegistration = {
-          ...res.registration,
-          phoneNumber: res.registration.phoneNumber || studentFullPhone,
-        };
-        setCurrentRegistration(regWithFullPhone);
-        saveStoredRegistration(regWithFullPhone);
+        setCurrentRegistration(res.registration);
+        saveStoredRegistration(res.registration);
       }
 
       if (res.sent) {

@@ -177,33 +177,34 @@ export function buildAdminWhatsAppMessage(registration: {
     ? new Date(registration.shareConfirmedAt).toLocaleString()
     : new Date().toLocaleString();
 
-  // Resolve complete student phone number exactly as submitted; never display a masked/shortened number or N/A when recoverable
-  let studentPhoneNumber = (
-    registration.phoneNumber ||
-    (registration as any)?.phone_number ||
-    (registration as any)?.phone ||
-    ''
-  ).trim();
+  // Restore the original masked phone-number format (e.g. 0801...444) using phoneMasked value
+  let maskedPhone = (registration.phoneMasked || '').trim();
 
-  // If missing or invalid (contains mask dots), attempt fallback to local storage backup
-  if ((!studentPhoneNumber || studentPhoneNumber === 'N/A' || studentPhoneNumber.includes('•') || studentPhoneNumber.includes('...')) && typeof window !== 'undefined') {
-    try {
-      const backup = localStorage.getItem('marion_undefeated_student_phone');
-      if (backup && !backup.includes('•') && !backup.includes('...') && backup.length >= 10) {
-        studentPhoneNumber = backup;
-      }
-    } catch {}
+  // If phoneMasked is not provided directly, generate masked format from phoneNumber
+  if (!maskedPhone && registration.phoneNumber) {
+    const raw = registration.phoneNumber.replace(/\D/g, '');
+    if (raw.length >= 7) {
+      maskedPhone = `${raw.slice(0, 4)}...${raw.slice(-3)}`;
+    } else {
+      maskedPhone = registration.phoneNumber;
+    }
   }
 
-  if (!studentPhoneNumber || studentPhoneNumber.includes('•') || studentPhoneNumber.includes('...')) {
-    studentPhoneNumber = 'N/A';
+  // Standardize bullet mask to the original 0801...444 format
+  if (maskedPhone && maskedPhone.includes('•')) {
+    maskedPhone = maskedPhone.replace(/\s*•+\s*/g, '...');
+  }
+
+  // Never display "N/A" when a masked phone number is available
+  if (!maskedPhone) {
+    maskedPhone = 'N/A';
   }
 
   return (
     `👋 *HELLO MARION UNDEFEATED ADMIN!*\n\n` +
     `I have registered for the *Student Airtime Giveaway 2026* and completed the sharing requirement. Here are my submission details:\n\n` +
     `📌 *Registration ID:* ${registration.id}\n` +
-    `📱 *Student Phone Number:* ${studentPhoneNumber}\n` +
+    `📱 *Student Phone Number:* ${maskedPhone}\n` +
     `📶 *Network Provider:* ${registration.network.toUpperCase()}\n` +
     `💰 *Requested Airtime:* ₦200\n` +
     `🔑 *Referral Code:* ${registration.referralCode}\n` +
