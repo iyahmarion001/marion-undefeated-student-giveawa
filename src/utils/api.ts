@@ -7,7 +7,21 @@ export function getStoredRegistration(): ParticipantRegistration | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(STORAGE_PARTICIPANT_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const reg: ParticipantRegistration = JSON.parse(raw);
+    if (reg) {
+      const backupPhone = localStorage.getItem('marion_undefeated_student_phone');
+      if ((!reg.phoneNumber || reg.phoneNumber.includes('•') || reg.phoneNumber.includes('...')) && backupPhone) {
+        reg.phoneNumber = backupPhone;
+      }
+      if (!reg.phoneNumber && (reg as any).phone_number) {
+        reg.phoneNumber = (reg as any).phone_number;
+      }
+      if (!reg.phoneNumber && (reg as any).phone) {
+        reg.phoneNumber = (reg as any).phone;
+      }
+    }
+    return reg;
   } catch {
     return null;
   }
@@ -16,7 +30,15 @@ export function getStoredRegistration(): ParticipantRegistration | null {
 export function saveStoredRegistration(registration: ParticipantRegistration): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_PARTICIPANT_KEY, JSON.stringify(registration));
+    const toSave: ParticipantRegistration = { ...registration };
+    const rawPhone = toSave.phoneNumber || (toSave as any).phone_number || (toSave as any).phone;
+    if (rawPhone && !rawPhone.includes('•') && !rawPhone.includes('...')) {
+      toSave.phoneNumber = rawPhone;
+      try {
+        localStorage.setItem('marion_undefeated_student_phone', rawPhone);
+      } catch {}
+    }
+    localStorage.setItem(STORAGE_PARTICIPANT_KEY, JSON.stringify(toSave));
   } catch (e) {
     console.error('Failed to save registration locally', e);
   }
@@ -224,10 +246,14 @@ export async function registerStudent(payload: {
 
   // 3. Process backend response
   if (result.ok && result.data && result.data.registration) {
-    saveStoredRegistration(result.data.registration);
+    const regWithPhone: ParticipantRegistration = {
+      ...result.data.registration,
+      phoneNumber: result.data.registration.phoneNumber || normalized,
+    };
+    saveStoredRegistration(regWithPhone);
     return {
       success: true,
-      registration: result.data.registration,
+      registration: regWithPhone,
       alreadyRegistered: result.data.alreadyRegistered,
       message: result.data.message || 'Registration saved successfully.',
     };
@@ -245,6 +271,7 @@ export async function registerStudent(payload: {
   // In case of static hosting without serverless functions or network latency
   const fallbackRegistration: ParticipantRegistration = {
     id: `REG-LOC-${Date.now()}`,
+    phoneNumber: normalized,
     phoneMasked: `${normalized.slice(0, 4)} •••• ${normalized.slice(-3)}`,
     network: (payload.network as any) || 'mtn',
     fullName: payload.fullName,
@@ -291,10 +318,22 @@ export async function confirmSharing(payload: {
   });
 
   if (result.ok && result.data && result.data.registration) {
-    saveStoredRegistration(result.data.registration);
+    const current = getStoredRegistration();
+    const resolvedPhone =
+      result.data.registration.phoneNumber ||
+      payload.phoneNumber ||
+      current?.phoneNumber ||
+      (typeof window !== 'undefined' ? localStorage.getItem('marion_undefeated_student_phone') : null) ||
+      undefined;
+
+    const regWithPhone: ParticipantRegistration = {
+      ...result.data.registration,
+      phoneNumber: resolvedPhone,
+    };
+    saveStoredRegistration(regWithPhone);
     return {
       success: true,
-      registration: result.data.registration,
+      registration: regWithPhone,
       message: result.data.message || 'Sharing confirmation recorded!',
     };
   }
@@ -302,8 +341,15 @@ export async function confirmSharing(payload: {
   // Client-side fallback if server was temporarily unavailable
   const current = getStoredRegistration();
   if (current) {
+    const resolvedPhone =
+      current.phoneNumber ||
+      payload.phoneNumber ||
+      (typeof window !== 'undefined' ? localStorage.getItem('marion_undefeated_student_phone') : null) ||
+      undefined;
+
     const updated: ParticipantRegistration = {
       ...current,
+      phoneNumber: resolvedPhone,
       shareConfirmed: true,
       shareMethod: payload.shareMethod,
       shareConfirmedAt: new Date().toISOString(),
@@ -337,10 +383,23 @@ export async function lookupStatus(query: string): Promise<{
   }>(`/api/status/${clean}`);
 
   if (result.ok && result.data && result.data.found && result.data.registration) {
-    saveStoredRegistration(result.data.registration);
+    const digits = query.replace(/\D/g, '');
+    const current = getStoredRegistration();
+    const resolvedPhone =
+      result.data.registration.phoneNumber ||
+      (digits.length >= 10 ? (digits.startsWith('0') ? digits : '0' + digits) : undefined) ||
+      current?.phoneNumber ||
+      (typeof window !== 'undefined' ? localStorage.getItem('marion_undefeated_student_phone') : null) ||
+      undefined;
+
+    const regWithPhone: ParticipantRegistration = {
+      ...result.data.registration,
+      phoneNumber: resolvedPhone,
+    };
+    saveStoredRegistration(regWithPhone);
     return {
       found: true,
-      registration: result.data.registration,
+      registration: regWithPhone,
     };
   }
 

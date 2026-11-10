@@ -177,10 +177,27 @@ export function buildAdminWhatsAppMessage(registration: {
     ? new Date(registration.shareConfirmedAt).toLocaleString()
     : new Date().toLocaleString();
 
-  // Show complete student phone number exactly as submitted; never display a masked/shortened number
-  const studentPhoneNumber = registration.phoneNumber && !registration.phoneNumber.includes('•') && !registration.phoneNumber.includes('...')
-    ? registration.phoneNumber
-    : (registration.phoneNumber || 'N/A');
+  // Resolve complete student phone number exactly as submitted; never display a masked/shortened number or N/A when recoverable
+  let studentPhoneNumber = (
+    registration.phoneNumber ||
+    (registration as any)?.phone_number ||
+    (registration as any)?.phone ||
+    ''
+  ).trim();
+
+  // If missing or invalid (contains mask dots), attempt fallback to local storage backup
+  if ((!studentPhoneNumber || studentPhoneNumber === 'N/A' || studentPhoneNumber.includes('•') || studentPhoneNumber.includes('...')) && typeof window !== 'undefined') {
+    try {
+      const backup = localStorage.getItem('marion_undefeated_student_phone');
+      if (backup && !backup.includes('•') && !backup.includes('...') && backup.length >= 10) {
+        studentPhoneNumber = backup;
+      }
+    } catch {}
+  }
+
+  if (!studentPhoneNumber || studentPhoneNumber.includes('•') || studentPhoneNumber.includes('...')) {
+    studentPhoneNumber = 'N/A';
+  }
 
   return (
     `👋 *HELLO MARION UNDEFEATED ADMIN!*\n\n` +
